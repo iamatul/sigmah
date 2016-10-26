@@ -59,7 +59,7 @@ import org.sigmah.shared.util.Filter;
 /**
  * Helper class that builds the ColumnModel for the SiteGrid, based 
  * on the provided filter.
- * <p/>
+ *
  * Migration Note: this file has been migrated (almost) as is. It does not follow
  * the 2.0 convention because of its "temporary" nature (as requested by Olivier Sarrat).
  * 
@@ -118,10 +118,6 @@ public class SiteColumnModelBuilder {
             columns.add(createDateColumn());		
         }
 
-        if(activity.getDatabase().isViewAllAllowed()) {
-            columns.add(new ColumnConfig("partner", I18N.CONSTANTS.partner(), 100));
-        }				
-        
         addIndicatorColumns(activity);
         addGeographicColumns(activity.getDatabase());
 	}

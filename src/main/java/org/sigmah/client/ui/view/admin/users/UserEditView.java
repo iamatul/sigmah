@@ -22,6 +22,11 @@ package org.sigmah.client.ui.view.admin.users;
  * #L%
  */
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 import org.sigmah.client.i18n.I18N;
 import org.sigmah.client.ui.presenter.admin.users.UserEditPresenter;
 import org.sigmah.client.ui.res.icon.IconImageBundle;
@@ -31,25 +36,41 @@ import org.sigmah.client.ui.widget.button.ClickableLabel;
 import org.sigmah.client.ui.widget.form.ComboboxButtonField;
 import org.sigmah.client.ui.widget.form.FormPanel;
 import org.sigmah.client.ui.widget.form.Forms;
+import org.sigmah.client.ui.widget.form.ListComboBox;
 import org.sigmah.client.ui.widget.popup.PopupWidget;
 import org.sigmah.client.util.ClientUtils;
 import org.sigmah.client.util.EnumModel;
 import org.sigmah.shared.Language;
+import org.sigmah.shared.dto.ContactDTO;
+import org.sigmah.shared.dto.ContactModelDTO;
+import org.sigmah.shared.dto.UserUnitDTO;
 import org.sigmah.shared.dto.orgunit.OrgUnitDTO;
 import org.sigmah.shared.dto.profile.ProfileDTO;
 import org.sigmah.shared.dto.util.EntityConstants;
 import org.sigmah.shared.util.Pair;
 
+import com.extjs.gxt.ui.client.data.ModelData;
 import com.extjs.gxt.ui.client.event.BaseEvent;
+import com.extjs.gxt.ui.client.event.ButtonEvent;
 import com.extjs.gxt.ui.client.event.ComponentEvent;
 import com.extjs.gxt.ui.client.event.Events;
 import com.extjs.gxt.ui.client.event.KeyListener;
 import com.extjs.gxt.ui.client.event.Listener;
+import com.extjs.gxt.ui.client.event.SelectionChangedEvent;
+import com.extjs.gxt.ui.client.event.SelectionChangedListener;
+import com.extjs.gxt.ui.client.event.SelectionListener;
 import com.extjs.gxt.ui.client.store.ListStore;
+import com.extjs.gxt.ui.client.store.StoreEvent;
+import com.extjs.gxt.ui.client.store.StoreListener;
 import com.extjs.gxt.ui.client.widget.form.ComboBox;
 import com.extjs.gxt.ui.client.widget.form.Field;
 import com.extjs.gxt.ui.client.widget.form.LabelField;
 import com.extjs.gxt.ui.client.widget.form.TextField;
+import com.extjs.gxt.ui.client.widget.grid.ColumnConfig;
+import com.extjs.gxt.ui.client.widget.grid.ColumnData;
+import com.extjs.gxt.ui.client.widget.grid.ColumnModel;
+import com.extjs.gxt.ui.client.widget.grid.Grid;
+import com.extjs.gxt.ui.client.widget.grid.GridCellRenderer;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.user.client.ui.FlowPanel;
@@ -75,9 +96,15 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 	private LabelField changePwdLink;
 	private TextField<String> emailField;
 	private ComboBox<EnumModel<Language>> languageField;
-	private ComboBox<OrgUnitDTO> orgUnitsField;
-	private ComboboxButtonField profilesField;
-	private FlowPanel profilesSelectionPanel;
+	private ComboBox<ContactDTO> contactOrganizationField;
+	private ComboBox<ContactModelDTO> contactModelField;
+	private Grid<UserUnitDTO> secondaryUserUnitsGrid;
+	private List<ListStore<OrgUnitDTO>> orgUnitStores;
+	private List<OrgUnitDTO> availableOrgUnits = Collections.emptyList();
+	private List<ListStore<ProfileDTO>> profileStores;
+	private List<ProfileDTO> availableProfiles = Collections.emptyList();
+	private Button addUserUnitButton;
+	private UserEditPresenter.UserUnitActionHandler userUnitActionHandler;
 
 	private Button createButton;
 
@@ -85,7 +112,7 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 	 * Popup initialization.
 	 */
 	public UserEditView() {
-		super(new PopupWidget(true), 550);
+		super(new PopupWidget(true), 800);
 	}
 
 	/**
@@ -93,6 +120,8 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 	 */
 	@Override
 	public void initialize() {
+		orgUnitStores = new ArrayList<ListStore<OrgUnitDTO>>();
+		profileStores = new ArrayList<ListStore<ProfileDTO>>();
 
 		// --
 		// Name field.
@@ -192,6 +221,16 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 		});
 
 		// --
+		// Contact organization field
+		// --
+		contactOrganizationField = Forms.combobox(I18N.CONSTANTS.adminUserContactOrganizationFieldLabel(), false, ContactDTO.ID, ContactDTO.FULLNAME);
+
+		// --
+		// Contact model field
+		// --
+		contactModelField = Forms.combobox(I18N.CONSTANTS.adminUserContactModelFieldLabel(), false, ContactModelDTO.ID, ContactModelDTO.NAME);
+
+		// --
 		// Language field.
 		// --
 
@@ -201,22 +240,102 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 		languageField.getStore().add(new EnumModel<Language>(Language.ES));
 
 		// --
+		// Hierarchy field
+		// --
+		ColumnConfig hierarchyColumnConfig = new ColumnConfig("hierarchy", I18N.CONSTANTS.adminHierarchy(), 150);
+		hierarchyColumnConfig.setSortable(false);
+		hierarchyColumnConfig.setRenderer(new GridCellRenderer() {
+			@Override
+			public Object render(ModelData modelData, String s, ColumnData columnData, int i, int i1, ListStore listStore, Grid grid) {
+				return ((UserUnitDTO) modelData).getMainUserUnit() ? I18N.CONSTANTS.adminIsMainOrgUnit() : I18N.CONSTANTS.adminIsSecondaryOrgUnit();
+			}
+		});
+
+		// --
 		// OrgUnits field.
 		// --
-
-		orgUnitsField =
-				Forms.combobox(I18N.CONSTANTS.adminUsersOrgUnit(), true, OrgUnitDTO.ID, OrgUnitDTO.FULL_NAME, I18N.CONSTANTS.adminUserCreationOrgUnitChoice(),
-					new ListStore<OrgUnitDTO>());
-
+		final ColumnConfig orgUnitColumnConfig = new ColumnConfig(UserUnitDTO.ORG_UNIT, I18N.CONSTANTS.orgunit(), 500);
+		orgUnitColumnConfig.setSortable(false);
+		orgUnitColumnConfig.setRenderer(new GridCellRenderer() {
+			@Override
+			public Object render(final ModelData model, String property, ColumnData config, int rowIndex, int colIndex, ListStore store, Grid grid) {
+				ComboBox<OrgUnitDTO> orgUnitComboBox = Forms.combobox(null, true, OrgUnitDTO.ID, OrgUnitDTO.FULL_NAME,
+					I18N.CONSTANTS.adminUserCreationOrgUnitChoice(), new ListStore<OrgUnitDTO>());
+				orgUnitComboBox.getStore().add(availableOrgUnits);
+				OrgUnitDTO orgUnit = ((UserUnitDTO) model).getOrgUnit();
+				if (orgUnit != null) {
+					orgUnitComboBox.setValue(orgUnit);
+				}
+				orgUnitStores.add(orgUnitComboBox.getStore());
+				orgUnitComboBox.addSelectionChangedListener(new SelectionChangedListener<OrgUnitDTO>() {
+					@Override
+					public void selectionChanged(SelectionChangedEvent<OrgUnitDTO> event) {
+						((UserUnitDTO) model).setOrgUnit(event.getSelectedItem());
+					}
+				});
+				return orgUnitComboBox;
+			}
+		});
 		// --
 		// Profiles adapter field.
 		// --
+		ColumnConfig profilesColumnConfig = new ColumnConfig(UserUnitDTO.PROFILES, I18N.CONSTANTS.adminProfiles(), 500);
+		profilesColumnConfig.setSortable(false);
+		profilesColumnConfig.setRenderer(new GridCellRenderer() {
+			@Override
+			public Object render(final ModelData model, String property, ColumnData config, int rowIndex, int colIndex, ListStore store, Grid grid) {
+				final ListComboBox<ProfileDTO> profileListComboBox = new ListComboBox<ProfileDTO>(ProfileDTO.ID, ProfileDTO.NAME);
+				List<ProfileDTO> profiles = model.get(property);
+				profileListComboBox.getListStore().add(profiles);
 
-		profilesField = new ComboboxButtonField(I18N.CONSTANTS.adminUsersProfiles(), new Pair<String, String>(ProfileDTO.ID, ProfileDTO.NAME));
-		profilesField.getComboBox(0).setEmptyText(I18N.CONSTANTS.adminUserCreationProfileChoice());
+				profileListComboBox.getListStore().addStoreListener(new StoreListener<ProfileDTO>() {
+					@Override
+					public void storeAdd(StoreEvent<ProfileDTO> event) {
+						// The data is not in event.getModel() but in event.getModels() (which contains only one element)...
+						userUnitActionHandler.onAddProfile((UserUnitDTO) model, event.getModels().get(0));
+					}
 
-		profilesSelectionPanel = new FlowPanel();
+					@Override
+					public void storeRemove(StoreEvent<ProfileDTO> event) {
+						userUnitActionHandler.onRemoveProfile((UserUnitDTO) model, event.getModel());
+					}
+				});
+				setAvailableProfiles(profileListComboBox.getAvailableValuesStore(), availableProfiles);
+				profileStores.add(profileListComboBox.getAvailableValuesStore());
+				profileListComboBox.initComponent();
+				return profileListComboBox;
+			}
+		});
 
+		ColumnConfig actionsColumnConfig = new ColumnConfig("actions", "", 150);
+		actionsColumnConfig.setSortable(false);
+		actionsColumnConfig.setFixed(true);
+		actionsColumnConfig.setRenderer(new GridCellRenderer() {
+			@Override
+			public Object render(final ModelData model, String property, ColumnData config, int rowIndex, int colIndex, ListStore store, Grid grid) {
+				if (((UserUnitDTO) model).getMainUserUnit()) {
+					return null;
+				}
+
+				Button removeUserUnitButton = new Button(I18N.CONSTANTS.removeItem());
+				removeUserUnitButton.addSelectionListener(new SelectionListener<ButtonEvent>() {
+					@Override
+					public void componentSelected(ButtonEvent event) {
+						userUnitActionHandler.onRemoveUserUnit((UserUnitDTO) model);
+					}
+				});
+
+				return removeUserUnitButton;
+			}
+		});
+
+		ColumnModel columnModel = new ColumnModel(Arrays.asList(hierarchyColumnConfig, orgUnitColumnConfig, profilesColumnConfig, actionsColumnConfig));
+		secondaryUserUnitsGrid = new Grid<UserUnitDTO>(new ListStore<UserUnitDTO>(), columnModel);
+		secondaryUserUnitsGrid.setAutoExpandColumn(UserUnitDTO.ORG_UNIT);
+		secondaryUserUnitsGrid.getView().setForceFit(true);
+		secondaryUserUnitsGrid.setAutoHeight(true);
+
+		addUserUnitButton = new Button(I18N.CONSTANTS.adminAddUserUnitButtonLabel());
 		// --
 		// Create button.
 		// --
@@ -235,10 +354,11 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 		formPanel.add(changePwdLink);
 		formPanel.add(pwdField);
 		formPanel.add(checkPwdField);
+		formPanel.add(contactOrganizationField);
+		formPanel.add(contactModelField);
 		formPanel.add(languageField);
-		formPanel.add(orgUnitsField);
-		formPanel.add(profilesField);
-		formPanel.add(Forms.adapter(null, profilesSelectionPanel));
+		formPanel.add(secondaryUserUnitsGrid);
+		formPanel.addButton(addUserUnitButton);
 		formPanel.addButton(createButton);
 
 		initPopup(formPanel);
@@ -255,36 +375,14 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 		pwdField.clear();
 		checkPwdField.clear();
 		languageField.clearSelections();
-		orgUnitsField.clearSelections();
-		profilesField.getComboBox(0).clearSelections();
+
+		secondaryUserUnitsGrid.getStore().removeAll();
+		orgUnitStores = new ArrayList<ListStore<OrgUnitDTO>>();
+		profileStores = new ArrayList<ListStore<ProfileDTO>>();
 
 		pwdField.hide();
 		changePwdLink.setVisible(false);
 		checkPwdField.hide();
-
-		profilesSelectionPanel.clear();
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public void addProfile(final ProfileDTO profile, final ClickHandler deleteHandler) {
-
-		final ClickableLabel label = new ClickableLabel(profile.getName());
-
-		label.addClickHandler(new ClickHandler() {
-
-			@Override
-			public void onClick(final ClickEvent event) {
-				if (deleteHandler != null) {
-					deleteHandler.onClick(event);
-					label.removeFromParent();
-				}
-			}
-		});
-
-		profilesSelectionPanel.add(label);
 	}
 
 	/**
@@ -327,28 +425,22 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 		return emailField;
 	}
 
+	@Override
+	public ComboBox<ContactDTO> getContactOrganizationField() {
+		return contactOrganizationField;
+	}
+
+	@Override
+	public ComboBox<ContactModelDTO> getContactModelField() {
+		return contactModelField;
+	}
+
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
 	public ComboBox<EnumModel<Language>> getLanguageField() {
 		return languageField;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public ComboBox<OrgUnitDTO> getOrgUnitsField() {
-		return orgUnitsField;
-	}
-
-	/**
-	 * {@inheritDoc}
-	 */
-	@Override
-	public ComboBox<ProfileDTO> getProfilesField() {
-		return profilesField.getComboBox(0);
 	}
 
 	/**
@@ -367,12 +459,46 @@ public class UserEditView extends AbstractPopupView<PopupWidget> implements User
 		return createButton;
 	}
 
-	/**
-	 * {@inheritDoc}
-	 */
 	@Override
-	public Button getAddProfileButton() {
-		return profilesField.getButton();
+	public ListStore<UserUnitDTO> getUserUnitStore() {
+		return secondaryUserUnitsGrid.getStore();
 	}
 
+	@Override
+	public Button getAddUserUnitButton() {
+		return addUserUnitButton;
+	}
+
+	@Override
+	public void setAvailableOrgUnits(List<OrgUnitDTO> orgUnits) {
+		availableOrgUnits = orgUnits;
+		for (ListStore<OrgUnitDTO> orgUnitStore : orgUnitStores) {
+			orgUnitStore.removeAll();
+			orgUnitStore.add(orgUnits);
+		}
+	}
+
+	@Override
+	public void setAvailableProfiles(List<ProfileDTO> profiles) {
+		availableProfiles = profiles;
+		for (ListStore<ProfileDTO> profileStore : profileStores) {
+			setAvailableProfiles(profileStore, profiles);
+		}
+	}
+
+	private void setAvailableProfiles(ListStore<ProfileDTO> store, List<ProfileDTO> profiles) {
+		store.removeAll();
+		for (ProfileDTO profile : profiles) {
+			if (store.findModel(ProfileDTO.ID, profile.getId()) != null) {
+				continue;
+			}
+
+			store.add(profile);
+		}
+	}
+
+	@Override
+	public void attachProfileHandler(UserEditPresenter.UserUnitActionHandler userUnitActionHandler) {
+		this.userUnitActionHandler = userUnitActionHandler;
+	}
 }

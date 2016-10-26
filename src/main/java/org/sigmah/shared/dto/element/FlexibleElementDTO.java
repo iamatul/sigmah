@@ -33,11 +33,14 @@ import org.sigmah.client.ui.notif.N10N;
 import org.sigmah.client.ui.res.icon.IconImageBundle;
 import org.sigmah.client.ui.widget.HistoryTokenText;
 import org.sigmah.client.ui.widget.HistoryWindow;
+import org.sigmah.client.util.ImageProvider;
+import org.sigmah.client.ui.widget.form.IterableGroupPanel;
 import org.sigmah.client.util.ToStringBuilder;
 import org.sigmah.shared.command.GetHistory;
 import org.sigmah.shared.command.result.Authentication;
 import org.sigmah.shared.command.result.ListResult;
 import org.sigmah.shared.command.result.ValueResult;
+import org.sigmah.shared.dto.ContactDTO;
 import org.sigmah.shared.dto.ProjectDTO;
 import org.sigmah.shared.dto.base.AbstractModelDataEntityDTO;
 import org.sigmah.shared.dto.element.event.RequiredValueEvent;
@@ -66,10 +69,19 @@ import com.extjs.gxt.ui.client.widget.form.Field;
 import com.extjs.gxt.ui.client.widget.menu.Menu;
 import com.extjs.gxt.ui.client.widget.menu.MenuItem;
 import com.google.gwt.event.shared.HandlerManager;
+import java.util.Collection;
+import com.google.gwt.user.client.rpc.AsyncCallback;
+
+import java.util.Collections;
+
 import java.util.Date;
+import java.util.Set;
+
 import org.sigmah.client.ui.widget.Loadable;
+import org.sigmah.shared.dto.computation.ComputationTriggerDTO;
 import org.sigmah.shared.dto.referential.GlobalPermissionEnum;
 import org.sigmah.shared.dto.referential.ValueEventChangeType;
+import org.sigmah.shared.util.ProjectUtils;
 
 /**
  * Abstract flexible element DTO.
@@ -99,8 +111,10 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	public static final String CONTAINER = "container";
 	public static final String CONSTRAINT = "constraint";
 	public static final String BANNER = "banner";
+	public static final String BANNER_POSITION = "bannerPos";
 	public static final String DISABLED_DATE = "disabledDate";
 	public static final String CREATION_DATE = "creationDate";
+	public static final String COMPUTATION_TRIGGERS = "computationTriggers";
 
 	// Provided elements.
 	protected transient HandlerManager handlerManager;
@@ -113,6 +127,10 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	protected transient int preferredWidth;
 	private transient Menu historyMenu;
 	protected transient UserLocalCache cache;
+	protected transient ImageProvider imageProvider;
+
+	// If element is part of an iterative group we need this to determine current iteration
+	private transient IterableGroupPanel tabPanel;
 
 	/**
 	 * Sets the dispatch service to be used in the {@link #getElementComponent(ValueResult)} method.
@@ -175,9 +193,13 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 		this.cache = cache;
 	}
 
+	public void setImageProvider(ImageProvider imageProvider) {
+		this.imageProvider = imageProvider;
+	}
+
 	/**
 	 * Method called just before the {@link FlexibleElementDTO#getElementComponent(ValueResult)} method to ensure the
-	 * instantiation of the attributes used by the client-side.<br/>
+	 * instantiation of the attributes used by the client-side.
 	 * This method can be override by subclasses.
 	 */
 	public void init() {
@@ -243,8 +265,7 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	 * @return The widget component.
 	 */
 	private Component getComponentWithHistory(ValueResult valueResult, boolean phaseIsEnded, boolean inBanner) {
-
-		if(ProfileUtils.getPermission(auth(), getPrivacyGroup()) == PrivacyGroupPermissionEnum.NONE) {
+		if (getPermission() == PrivacyGroupPermissionEnum.NONE) {
 			return null;
 		}
 		
@@ -282,7 +303,44 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 
 		return component;
 	}
-	
+
+	private Set<Integer> getOrgUnitIds() {
+		if (currentContainerDTO instanceof DefaultFlexibleElementContainer) {
+			return Collections.singleton(((DefaultFlexibleElementContainer) currentContainerDTO).getOrgUnitId());
+		} else if (currentContainerDTO instanceof ContactDTO) {
+			return ((ContactDTO) currentContainerDTO).getOrgUnitIds();
+		} else {
+			return Collections.emptySet();
+		}
+	}
+
+	private PrivacyGroupPermissionEnum getPermission() {
+
+		if (getOrgUnitIds().contains(null)) {
+			// only draft projects does not have any org units :
+			// if you can see the project you can do what you want with it
+			return PrivacyGroupPermissionEnum.WRITE;
+		}
+
+		PrivacyGroupPermissionEnum permission = PrivacyGroupPermissionEnum.NONE;
+
+		for (Integer orgUnitId : getOrgUnitIds()) {
+			PrivacyGroupPermissionEnum privacyGroupPermission = ProfileUtils.getPermissionForOrgUnit(auth(), orgUnitId, getPrivacyGroup());
+			switch (privacyGroupPermission) {
+				case NONE:
+					break;
+				case READ:
+					permission = PrivacyGroupPermissionEnum.READ;
+					break;
+				case WRITE:
+					return PrivacyGroupPermissionEnum.WRITE;
+				default:
+					throw new IllegalStateException("Unknown PrivacyGroupPermissionEnum : " + privacyGroupPermission);
+			}
+		}
+		return permission;
+	}
+
 	/**
 	 * Creates the history menu. Displayed when the user right click a flexible 
 	 * element.
@@ -316,7 +374,9 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	 * @param loadables Element to mask during the load of the history.
 	 */
 	protected void loadAndShowHistory(Loadable... loadables) {
-		dispatch.execute(new GetHistory(getId(), currentContainerDTO.getId()), new CommandResultHandler<ListResult<HistoryTokenListDTO>>() {
+		final Integer iterationId = tabPanel == null ? null : tabPanel.getCurrentIterationId();
+
+		dispatch.execute(new GetHistory(getId(), currentContainerDTO.getId(), iterationId), new CommandResultHandler<ListResult<HistoryTokenListDTO>>() {
 
 			@Override
 			public void onCommandFailure(final Throwable e) {
@@ -365,7 +425,7 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	 * <code>changeType</code>, <code>false</code> otherwise.
 	 */
 	protected boolean userCanPerformChangeType(ValueEventChangeType changeType) {
-		final PrivacyGroupPermissionEnum permission = ProfileUtils.getPermission(auth(), getPrivacyGroup());
+		final PrivacyGroupPermissionEnum permission = getPermission();
 		
 		if(permission == PrivacyGroupPermissionEnum.READ) {
 			return false;
@@ -376,6 +436,10 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 
 			} else if(currentContainerDTO instanceof OrgUnitDTO) {
 				return userCanPerformChangeTypeOnOrgUnit(changeType, (OrgUnitDTO)currentContainerDTO);
+
+			} else if (currentContainerDTO instanceof ContactDTO) {
+				return userCanPerformChangeTypeOnContact(changeType, (ContactDTO) currentContainerDTO);
+
 			}
 		}
 		
@@ -385,9 +449,9 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	/**
 	 * Returns <code>true</code> if the current user is allowed to perform
 	 * the given change type on the given project.
-	 * <br/>
+	 *
 	 * The default implementation checks for the 
-	 * {@link GlobalPermissionEnum#EDIT_PROJECT} right and to the current
+	 * {@link GlobalPermissionEnum#EDIT_ALL_PROJECTS} right and to the current
 	 * amendment state.
 	 * 
 	 * @param changeType Type of change to verify.
@@ -414,8 +478,8 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 			!phaseIsEnded &&
 			// Current project is opened.
 			!project.isClosed() &&
-			// The user is granted edit rights on the project.
-			ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_PROJECT) && (
+			// Check that the user can edit the project
+			ProjectUtils.isProjectEditable(project, auth()) && (
 				// This element is not part of the core version
 				!getAmendable() || 
 				// OR the core version is in an editable state
@@ -428,7 +492,7 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	/**
 	 * Returns <code>true</code> if the current user is allowed to perform
 	 * the given change type on the given organization unit.
-	 * <br/>
+	 *
 	 * For organization units, the default implementation only checks for the
 	 * {@link GlobalPermissionEnum#EDIT_ORG_UNIT} right.
 	 * 
@@ -443,6 +507,11 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 			!orgUnit.getOrgUnitModel().isUnderMaintenance() &&
 			// The is granted edit rights on organizational units.
 			ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_ORG_UNIT);
+	}
+
+	protected boolean userCanPerformChangeTypeOnContact(ValueEventChangeType changeType, ContactDTO contact) {
+		// TODO: Verify the future permission EDIT_CONTACT
+		return !contact.getContactModel().isUnderMaintenance();
 	}
 
 	/**
@@ -582,6 +651,14 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	public void setPrivacyGroup(PrivacyGroupDTO privacyGroup) {
 		set(PRIVACY_GROUP, privacyGroup);
 	}
+	
+	public Collection<ComputationTriggerDTO> getComputationTriggers() {
+		return get(COMPUTATION_TRIGGERS);
+	}
+	
+	public void setComputationTriggers(Collection<ComputationTriggerDTO> computationTriggers) {
+		set(COMPUTATION_TRIGGERS, computationTriggers);
+	}
 
 	protected void ensureHistorable() {
 		if (!isHistorable()) {
@@ -628,7 +705,7 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	}
 
 	public ElementTypeEnum getElementType() {
-		ElementTypeEnum type = null;
+		final ElementTypeEnum type;
 		
 		// INFO: Budget elements are handled like DEFAULT elements.
 		
@@ -636,8 +713,12 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 			type = ElementTypeEnum.TEXT_AREA;
 		} else if (this instanceof CheckboxElementDTO) {
 			type = ElementTypeEnum.CHECKBOX;
+		} else if (this instanceof ContactListElementDTO) {
+			type = ElementTypeEnum.CONTACT_LIST;
 		} else if (this instanceof DefaultFlexibleElementDTO) {
 			type = ElementTypeEnum.DEFAULT;
+		} else if (this instanceof DefaultContactFlexibleElementDTO) {
+			type = ElementTypeEnum.DEFAULT_CONTACT;
 		} else if (this instanceof FilesListElementDTO) {
 			type = ElementTypeEnum.FILES_LIST;
 		} else if (this instanceof IndicatorsListElementDTO) {
@@ -656,6 +737,8 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 			type = ElementTypeEnum.CORE_VERSION;
 		} else if (this instanceof ComputationElementDTO) {
 			type = ElementTypeEnum.COMPUTATION;
+		} else {
+			throw new UnsupportedOperationException("Type '" + getClass() + "' is not supported.");
 		}
 		return type;
 	}
@@ -710,5 +793,13 @@ public abstract class FlexibleElementDTO extends AbstractModelDataEntityDTO<Inte
 	
 	public void setCreationDate(Date creationDate) {
 		set(CREATION_DATE, creationDate);
+	}
+
+	public void setTabPanel(IterableGroupPanel tabPanel) {
+		this.tabPanel = tabPanel;
+	}
+
+	public IterableGroupPanel getTabPanel() {
+		return tabPanel;
 	}
 }

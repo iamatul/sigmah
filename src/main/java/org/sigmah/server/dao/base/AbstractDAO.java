@@ -24,7 +24,9 @@ package org.sigmah.server.dao.base;
 
 import java.io.Serializable;
 import java.sql.Connection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
@@ -47,7 +49,7 @@ import com.google.inject.persist.Transactional;
  * <p>
  * Parent class of all DAO implementations.
  * </p>
- * 
+ *
  * @param <E>
  *          Entity type.
  * @param <K>
@@ -62,7 +64,7 @@ public abstract class AbstractDAO<E extends Entity, K extends Serializable> exte
 	protected final Class<E> entityClass;
 
 	/**
-	 * Initializes a new AbstractDAO.<br/>
+	 * Initializes a new AbstractDAO.
 	 * Populates the {@link #entityClass} attribute.
 	 */
 	@SuppressWarnings("unchecked")
@@ -130,6 +132,20 @@ public abstract class AbstractDAO<E extends Entity, K extends Serializable> exte
 	@Override
 	public E findById(final K primaryKey) {
 		return em().find(entityClass, primaryKey);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public List<E> findByIds(Set<K> primaryKeys) {
+		if (primaryKeys.isEmpty()) {
+			return Collections.emptyList();
+		}
+
+		TypedQuery<E> query = em().createQuery("SELECT e FROM " + entityClass.getName() + " e WHERE id IN (:ids)", entityClass);
+		query.setParameter("ids", primaryKeys);
+		return query.getResultList();
 	}
 
 	/**
@@ -239,9 +255,9 @@ public abstract class AbstractDAO<E extends Entity, K extends Serializable> exte
 	// ------------------------------------------------------------------------------------------
 
 	/**
-	 * Executes the given JPQL or native SQL {@code updateQuery}.<br/>
+	 * Executes the given JPQL or native SQL {@code updateQuery}.
 	 * Checks the transaction before execution (see {@link #checkTransaction(EntityManager)}).
-	 * 
+	 *
 	 * @param updateQuery
 	 *          The update JPQL or native SQL query.
 	 * @return the number of elements updated/deleted.
@@ -260,7 +276,7 @@ public abstract class AbstractDAO<E extends Entity, K extends Serializable> exte
 
 	/**
 	 * Returns the given {@code em} inner session implementation.
-	 * 
+	 *
 	 * @param em
 	 *          The entity manager.
 	 * @return the given {@code em} inner session implementation.
@@ -275,9 +291,9 @@ public abstract class AbstractDAO<E extends Entity, K extends Serializable> exte
 	}
 
 	/**
-	 * Returns the {@code java.sql.Connection} from the given {@code em}.<br/>
+	 * Returns the {@code java.sql.Connection} from the given {@code em}.
 	 * Entity manager is flushed if active transaction is running.
-	 * 
+	 *
 	 * @param em
 	 *          The entity manager.
 	 * @return the {@code java.sql.Connection} unwrapped from the given {@code em}.
@@ -293,7 +309,7 @@ public abstract class AbstractDAO<E extends Entity, K extends Serializable> exte
 	/**
 	 * Checks if active transaction is running. If so, given {@code em} is flushed in order to synchronize persistence
 	 * context.
-	 * 
+	 *
 	 * @param em
 	 *          The entity manager.
 	 */

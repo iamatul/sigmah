@@ -120,7 +120,7 @@ public class GetFilesFromFavoriteProjectsHandler extends AbstractCommandHandler<
 		final Set<OrgUnit> units = new HashSet<>();
 
 		// Crawl the org units hierarchy from the user root org unit.
-		Handlers.crawlUnits(context.getUser().getOrgUnitWithProfiles().getOrgUnit(), units, true);
+		Handlers.crawlUnits(context.getUser(), units, true);
 		
 		for(final OrgUnit unit : units) {
 			final List<Integer> fileIds = new ArrayList<>();
@@ -149,7 +149,7 @@ public class GetFilesFromFavoriteProjectsHandler extends AbstractCommandHandler<
 
 	/**
 	 * Creates a list from the last versions of the given files.
-	 * <p/>
+	 *
 	 * File versions will only be added if they exists on the server.
 	 * 
 	 * @param fileIds Files to search.

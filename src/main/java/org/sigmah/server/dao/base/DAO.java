@@ -24,6 +24,7 @@ package org.sigmah.server.dao.base;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Set;
 
 import javax.persistence.EntityNotFoundException;
 import javax.persistence.criteria.CriteriaBuilder;
@@ -40,7 +41,7 @@ import org.sigmah.server.domain.util.Deleteable;
  * <p>
  * Should be implemented by all DAO implementations.
  * </p>
- * 
+ *
  * @param <E>
  *          Entity type.
  * @param <K>
@@ -51,7 +52,7 @@ public interface DAO<E extends Entity, K extends Serializable> {
 
 	/**
 	 * Returns the {@link CriteriaBuilder} instance.
-	 * 
+	 *
 	 * @return The {@link CriteriaBuilder} instance.
 	 */
 	CriteriaBuilder getCriteriaBuilder();
@@ -64,14 +65,14 @@ public interface DAO<E extends Entity, K extends Serializable> {
 
 	/**
 	 * Counts the total number of entities.
-	 * 
+	 *
 	 * @return the total number of entities.
 	 */
 	int countAll();
 
 	/**
 	 * Counts the given {@code criteriaQuery} corresponding number of entities.
-	 * 
+	 *
 	 * @return The given {@code criteriaQuery} corresponding number of entities.
 	 */
 	int countByCriteria(final CriteriaQuery<Number> criteriaQuery);
@@ -88,7 +89,7 @@ public interface DAO<E extends Entity, K extends Serializable> {
 	 * runtime is permitted to throw the {@code EntityNotFoundException} when {@code getReference} is called.) The
 	 * application should not expect that the instance state will be available upon detachment, unless it was accessed by
 	 * the application while the entity manager was open.
-	 * 
+	 *
 	 * @param primaryKey
 	 *          The primary key.
 	 * @return The found entity instance.
@@ -102,14 +103,14 @@ public interface DAO<E extends Entity, K extends Serializable> {
 
 	/**
 	 * Finds all the entities.
-	 * 
+	 *
 	 * @return All the entities.
 	 */
 	List<E> findAll();
 
 	/**
 	 * Finds the given {@code primaryKey} corresponding entity.
-	 * 
+	 *
 	 * @param primaryKey
 	 *          The entity primary key.
 	 * @return the given {@code primaryKey} corresponding entity.
@@ -117,8 +118,17 @@ public interface DAO<E extends Entity, K extends Serializable> {
 	E findById(final K primaryKey);
 
 	/**
+	 * Finds the given {@code primaryKey} corresponding entities.
+	 *
+	 * @param primaryKeys
+	 *          The entity primary keys.
+	 * @return the given {@code primaryKey} corresponding entities.
+	 */
+	List<E> findByIds(final Set<K> primaryKeys);
+
+	/**
 	 * Finds the given {@code criteriaQuery} corresponding entities.
-	 * 
+	 *
 	 * @param criteriaQuery
 	 *          The criteria query.
 	 * @return The given {@code criteriaQuery} corresponding entities.
@@ -133,7 +143,7 @@ public interface DAO<E extends Entity, K extends Serializable> {
 
 	/**
 	 * Persists the given {@code entity}.
-	 * 
+	 *
 	 * @param entity
 	 *          The entity to persist. Does nothing if {@code null}.
 	 * @return the persisted (updated) entity.
@@ -144,7 +154,7 @@ public interface DAO<E extends Entity, K extends Serializable> {
 
 	/**
 	 * Persists the given {@code entity} with the given {@code user}.
-	 * 
+	 *
 	 * @param entity
 	 *          The entity to persist. Does nothing if {@code null}.
 	 * @param user
@@ -165,10 +175,10 @@ public interface DAO<E extends Entity, K extends Serializable> {
 	 * </p>
 	 * <p>
 	 * If the {@code primaryKey} corresponding entity is a {@link Deleteable} instance, its {@link Deleteable#delete()}
-	 * method is executed and a <b>logical</b> deletion is processed.<br/>
+	 * method is executed and a <b>logical</b> deletion is processed.
 	 * Otherwise, a <b>physical</b> deletion action is processed.
 	 * </p>
-	 * 
+	 *
 	 * @param primaryKey
 	 *          The primary key referencing the entity to remove. Does nothing if {@code null}.
 	 * @deprecated Remove action should be executed with user. See {@link #remove(Serializable, User)}.
@@ -182,10 +192,10 @@ public interface DAO<E extends Entity, K extends Serializable> {
 	 * </p>
 	 * <p>
 	 * If the {@code entity} is a {@link Deleteable} instance, its {@link Deleteable#delete()} method is executed and a
-	 * <b>logical</b> deletion is processed.<br/>
+	 * <b>logical</b> deletion is processed.
 	 * Otherwise, a <b>physical</b> deletion action is processed.
 	 * </p>
-	 * 
+	 *
 	 * @param entity
 	 *          The entity to remove. Does nothing if {@code null}.
 	 * @deprecated Remove action should be executed with user. See {@link #remove(Entity, User)}.
@@ -199,10 +209,10 @@ public interface DAO<E extends Entity, K extends Serializable> {
 	 * </p>
 	 * <p>
 	 * If the {@code primaryKey} corresponding entity is a {@link Deleteable} instance, its {@link Deleteable#delete()}
-	 * method is executed and a <b>logical</b> deletion is processed.<br/>
+	 * method is executed and a <b>logical</b> deletion is processed.
 	 * Otherwise, a <b>physical</b> deletion action is processed.
 	 * </p>
-	 * 
+	 *
 	 * @param primaryKey
 	 *          The primary key referencing the entity to remove. Does nothing if {@code null}.
 	 * @param user
@@ -216,10 +226,10 @@ public interface DAO<E extends Entity, K extends Serializable> {
 	 * </p>
 	 * <p>
 	 * If the {@code entity} is a {@link Deleteable} instance, its {@link Deleteable#delete()} method is executed and a
-	 * <b>logical</b> deletion is processed.<br/>
+	 * <b>logical</b> deletion is processed.
 	 * Otherwise, a <b>physical</b> deletion action is processed.
 	 * </p>
-	 * 
+	 *
 	 * @param entity
 	 *          The entity to remove. Does nothing if {@code null}.
 	 * @param user

@@ -25,6 +25,7 @@ package org.sigmah.client.ui.widget.form;
 
 import java.util.Date;
 
+import org.sigmah.client.dispatch.DispatchAsync;
 import org.sigmah.client.i18n.I18N;
 import org.sigmah.client.ui.widget.button.Button;
 import org.sigmah.client.ui.widget.button.SplitButton;
@@ -71,6 +72,8 @@ import com.google.gwt.user.client.ui.ScrollPanel;
 import com.google.gwt.user.client.ui.UIObject;
 import com.google.gwt.user.client.ui.Widget;
 import org.sigmah.client.ui.res.icon.IconImageBundle;
+import org.sigmah.shared.dto.element.FlexibleElementContainer;
+import org.sigmah.shared.dto.layout.LayoutGroupDTO;
 
 /**
  * <p>
@@ -107,7 +110,7 @@ public final class Forms {
 
 	/**
 	 * <p>
-	 * Default forms panels right padding (in pixels).<br/>
+	 * Default forms panels right padding (in pixels).
 	 * This specific right padding is used to properly display fields error icons.
 	 * </p>
 	 */
@@ -122,7 +125,7 @@ public final class Forms {
 	 * Builds a new {@link org.sigmah.client.ui.widget.form.FormPanel} with default {@link FormLayout}.
 	 * 
 	 * @param stylenames
-	 *          (optional) Style names added to the panel component.<br/>
+	 *          (optional) Style names added to the panel component.
 	 *          {@code null} values are ignored.
 	 * @return The {@link org.sigmah.client.ui.widget.form.FormPanel} instance.
 	 */
@@ -137,7 +140,7 @@ public final class Forms {
 	 * @param labelWidth
 	 *          The width of the form fields labels.
 	 * @param stylenames
-	 *          (optional) Style names added to the panel component.<br/>
+	 *          (optional) Style names added to the panel component.
 	 *          {@code null} values are ignored.
 	 * @return The {@link org.sigmah.client.ui.widget.form.FormPanel} instance.
 	 */
@@ -154,7 +157,7 @@ public final class Forms {
 	 * @param fieldWidth
 	 *          The width of the form fields. Set a default value if {@code null}.
 	 * @param stylenames
-	 *          (optional) Style names added to the panel component.<br/>
+	 *          (optional) Style names added to the panel component.
 	 *          {@code null} values are ignored.
 	 * @return The {@link org.sigmah.client.ui.widget.form.FormPanel} instance.
 	 */
@@ -167,7 +170,7 @@ public final class Forms {
 	 * Builds a new {@link org.sigmah.client.ui.widget.form.FormPanel} with default {@link FormLayout}.
 	 * 
 	 * @param title
-	 *          The panel header title (html is supported).<br/>
+	 *          The panel header title (html is supported).
 	 *          If {@code null}, header is disabled and automatically hidden.
 	 * @param collapsible
 	 *          {@code true} to set the panel collapsible (expand/collapse toggle button).
@@ -176,7 +179,7 @@ public final class Forms {
 	 * @param fieldWidth
 	 *          The width of the form fields. Set a default value if {@code null}.
 	 * @param stylenames
-	 *          (optional) Style names added to the panel component.<br/>
+	 *          (optional) Style names added to the panel component.
 	 *          {@code null} values are ignored.
 	 * @return The {@link org.sigmah.client.ui.widget.form.FormPanel} instance.
 	 */
@@ -206,6 +209,43 @@ public final class Forms {
 		return panel;
 	}
 
+	/**
+	 * Builds a new {@link org.sigmah.client.ui.widget.form.IterableGroupPanel}.
+	 *
+	 * @param title
+	 *          The panel header title (html is supported).
+	 *          If {@code null}, header is disabled and automatically hidden.
+	 * @param stylenames
+	 *          (optional) Style names added to the panel component.
+	 *          {@code null} values are ignored.
+	 * @return The {@link org.sigmah.client.ui.widget.form.IterableGroupPanel} instance.
+	 */
+	public static org.sigmah.client.ui.widget.form.IterableGroupPanel iterableGroupPanel(DispatchAsync dispatch,
+																																											 final LayoutGroupDTO layoutGroup,
+																																											 FlexibleElementContainer container,
+																																											 final boolean canEdit,
+																																											 final String... stylenames) {
+
+		final org.sigmah.client.ui.widget.form.IterableGroupPanel panel = new org.sigmah.client.ui.widget.form.IterableGroupPanel(dispatch, layoutGroup, container, canEdit);
+
+		String title = layoutGroup.getTitle();
+
+		panel.setTitle(ClientUtils.isNotBlank(title) ? title : null);
+
+		if (ClientUtils.isNotEmpty(stylenames)) {
+			for (final String stylename : stylenames) {
+				if (ClientUtils.isBlank(stylename)) {
+					continue;
+				}
+				panel.addStyleName(stylename);
+			}
+		}
+
+		return panel;
+	}
+
+
+
 	// --------------------------------------------------------------------------------
 	//
 	// LAYOUT.
@@ -230,7 +270,7 @@ public final class Forms {
 	 * @param fieldWidth
 	 *          The width of the form fields. Set a default value if {@code null}.
 	 * @param stylenames
-	 *          (optional) Style names added to the layout.<br/>
+	 *          (optional) Style names added to the layout.
 	 *          {@code null} values are ignored.
 	 * @return The {@link FormLayout} instance.
 	 */

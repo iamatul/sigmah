@@ -38,6 +38,7 @@ public enum DefaultFlexibleElementType implements Result, LogicalElementType {
 	CODE,
 	TITLE,
 	BUDGET,
+	BUDGET_RATIO,
 	START_DATE,
 	END_DATE,
 	COUNTRY,
@@ -46,7 +47,7 @@ public enum DefaultFlexibleElementType implements Result, LogicalElementType {
 	ORG_UNIT;
 
 	/**
-	 * Returns the given {@code flexibleElementType} corresponding name.<br/>
+	 * Returns the given {@code flexibleElementType} corresponding name.
 	 * This method should be executed from client-side. If executed from server-side, it returns the enum constant name.
 	 * 
 	 * @param flexibleElementType
@@ -72,6 +73,9 @@ public enum DefaultFlexibleElementType implements Result, LogicalElementType {
 
 			case BUDGET:
 				return I18N.CONSTANTS.projectBudget();
+
+			case BUDGET_RATIO:
+				return I18N.CONSTANTS.projectBudgetRatio();
 
 			case START_DATE:
 				return I18N.CONSTANTS.projectStartDate();
@@ -119,6 +123,11 @@ public enum DefaultFlexibleElementType implements Result, LogicalElementType {
     public DefaultFlexibleElementType toDefaultFlexibleElementType() {
         return this;
     }
+
+  @Override
+  public DefaultContactFlexibleElementType toDefaultContactFlexibleElementType() {
+    return null;
+  }
 
     /**
      * {@inheritDoc}

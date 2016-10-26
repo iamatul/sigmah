@@ -29,10 +29,10 @@ import java.util.List;
 
 import org.sigmah.client.i18n.I18N;
 import org.sigmah.client.ui.presenter.DashboardPresenter;
+import org.sigmah.client.ui.presenter.contact.dashboardlist.ContactsListWidget;
 import org.sigmah.client.ui.presenter.project.treegrid.ProjectsListWidget;
 import org.sigmah.client.ui.res.icon.IconImageBundle;
 import org.sigmah.client.ui.view.base.AbstractView;
-import org.sigmah.client.ui.widget.HasTreeGrid;
 import org.sigmah.client.ui.widget.button.Button;
 import org.sigmah.client.ui.widget.form.Forms;
 import org.sigmah.client.ui.widget.layout.Layouts;
@@ -41,7 +41,6 @@ import org.sigmah.client.ui.widget.orgunit.OrgUnitTreeGrid;
 import org.sigmah.client.ui.widget.panel.Panels;
 import org.sigmah.client.util.ClientUtils;
 import org.sigmah.client.util.DateUtils;
-import org.sigmah.shared.dto.orgunit.OrgUnitDTO;
 import org.sigmah.shared.dto.reminder.MonitoredPointDTO;
 import org.sigmah.shared.dto.reminder.ReminderDTO;
 
@@ -70,10 +69,8 @@ import com.google.gwt.user.client.ui.Widget;
 import com.google.inject.Inject;
 import com.google.inject.Provider;
 import com.google.inject.Singleton;
-import org.sigmah.client.page.Page;
-import org.sigmah.client.page.RequestParameter;
 import org.sigmah.client.ui.presenter.DashboardPresenter.ReminderOrMonitoredPointHandler;
-import org.sigmah.client.ui.presenter.project.dashboard.ProjectDashboardPresenter;
+
 
 /**
  * Dashboard view.
@@ -90,6 +87,9 @@ public class DashboardView extends AbstractView implements DashboardPresenter.Vi
 	private static final String EXPECTED_DATE_LABEL_STYLE = "points-date-exceeded";
 
 	@Inject
+	private Provider<ContactsListWidget> contactsListWidgetProvider;
+
+	@Inject
 	private Provider<ProjectsListWidget> projectsListWidgetProvider;
 
 	private ContentPanel remindersPanel;
@@ -102,6 +102,8 @@ public class DashboardView extends AbstractView implements DashboardPresenter.Vi
 
 	private ContentPanel orgUnitsPanel;
 	private OrgUnitTreeGrid orgUnitsTreeGrid;
+
+	private ContactsListWidget contactsListWidget;
 
 	private ProjectsListWidget projectsListWidget;
 
@@ -138,12 +140,21 @@ public class DashboardView extends AbstractView implements DashboardPresenter.Vi
 		add(leftContainer, Layouts.borderLayoutData(LayoutRegion.WEST, Layouts.LEFT_COLUMN_WIDTH));
 
 		// --
-		// Center panel (OrgUnits + Projects).
+		// Center panel (OrgUnits + Contacts + Projects).
 		// --
 		final LayoutContainer centerContainer = Layouts.vBox();
 
-		centerContainer.add(createOrgUnitsPanel(), Layouts.vBoxData(1.0, Margin.BOTTOM, Margin.LEFT));
-		centerContainer.add(createProjectsPanel(), Layouts.vBoxData(2.0, Margin.LEFT));
+		// --
+		// Center-Up panel (OrgUnits + Contacts).
+		// --
+		final LayoutContainer centerUpContainer = Layouts.hBox();
+
+		centerUpContainer.add(createOrgUnitsPanel(), Layouts.hBoxData(1.0));
+
+		centerUpContainer.add(createContactsPanel(), Layouts.hBoxData(1.0, Margin.LEFT));
+
+		centerContainer.add(centerUpContainer, Layouts.vBoxData(1.0, Margin.BOTTOM, Margin.LEFT));
+		centerContainer.add(createProjectsPanel(), Layouts.vBoxData(1.0, Margin.LEFT));
 
 		add(centerContainer);
 
@@ -221,14 +232,17 @@ public class DashboardView extends AbstractView implements DashboardPresenter.Vi
 	 */
 	@Override
 	public void layoutViews() {
+		if (contactsListWidget != null) {
+			contactsListWidget.getView().syncSize();
 		projectsListWidget.getView().syncSize();
+	}
 	}
 	
 	/**
 	 * {@inheritDoc}
 	 */
 	@Override
-	public HasTreeGrid<OrgUnitDTO> getOrgUnitsTreeGrid() {
+	public OrgUnitTreeGrid getOrgUnitsTreeGrid() {
 		return orgUnitsTreeGrid;
 	}
 
@@ -236,8 +250,23 @@ public class DashboardView extends AbstractView implements DashboardPresenter.Vi
 	 * {@inheritDoc}
 	 */
 	@Override
-	public void setOrgUnitsPanelTitle(final String title) {
-		orgUnitsPanel.setHeadingText(title);
+	public void setPanelsTitleSuffix(final String suffix) {
+		orgUnitsPanel.setHeadingText(I18N.CONSTANTS.orgunitTree() + suffix);
+
+		projectsListWidget.setTitleSupplier(new ProjectsListWidget.TitleSupplier() {
+			@Override
+			public String supplyTitle(int projectCount) {
+				return ProjectsListWidget.DEFAULT_TITLE_SUPPLIER.supplyTitle(projectCount) + suffix;
+			}
+		});
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public ContactsListWidget getContactsList() {
+		return contactsListWidget;
 	}
 
 	/**
@@ -324,6 +353,19 @@ public class DashboardView extends AbstractView implements DashboardPresenter.Vi
 		orgUnitsPanel.add(orgUnitsTreeGrid.getTreeGrid());
 
 		return orgUnitsPanel;
+	}
+
+	/**
+	 * Creates the contacts component.
+	 *
+	 * @return The contacts component widget.
+	 */
+	private Widget createContactsPanel() {
+
+		contactsListWidget = contactsListWidgetProvider.get();
+		contactsListWidget.initialize();
+
+		return contactsListWidget.getView().asWidget();
 	}
 
 	/**

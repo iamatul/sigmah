@@ -24,7 +24,9 @@ package org.sigmah.client.ui.presenter;
 
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.sigmah.client.dispatch.CommandResultHandler;
 import org.sigmah.client.dispatch.monitor.LoadingMask;
@@ -34,18 +36,19 @@ import org.sigmah.client.page.Page;
 import org.sigmah.client.page.PageRequest;
 import org.sigmah.client.page.RequestParameter;
 import org.sigmah.client.ui.presenter.base.AbstractPagePresenter;
+import org.sigmah.client.ui.presenter.contact.dashboardlist.ContactsListWidget;
 import org.sigmah.client.ui.presenter.project.treegrid.ProjectsListWidget;
 import org.sigmah.client.ui.presenter.project.treegrid.ProjectsListWidget.LoadingMode;
 import org.sigmah.client.ui.presenter.project.treegrid.ProjectsListWidget.RefreshMode;
 import org.sigmah.client.ui.res.icon.IconImageBundle;
 import org.sigmah.client.ui.view.DashboardView;
 import org.sigmah.client.ui.view.base.ViewInterface;
-import org.sigmah.client.ui.widget.HasTreeGrid;
 import org.sigmah.client.ui.widget.HasTreeGrid.TreeGridEventHandler;
 import org.sigmah.client.ui.widget.WorkInProgressWidget;
+import org.sigmah.client.ui.widget.orgunit.OrgUnitTreeGrid;
 import org.sigmah.client.util.ClientUtils;
 import org.sigmah.shared.command.GetMonitoredPoints;
-import org.sigmah.shared.command.GetOrgUnit;
+import org.sigmah.shared.command.GetOrgUnits;
 import org.sigmah.shared.command.GetReminders;
 import org.sigmah.shared.command.result.ListResult;
 import org.sigmah.shared.dto.orgunit.OrgUnitDTO;
@@ -55,10 +58,13 @@ import org.sigmah.shared.dto.reminder.ReminderDTO;
 import org.sigmah.shared.util.ProfileUtils;
 
 import com.allen_sauer.gwt.log.client.Log;
+import com.extjs.gxt.ui.client.event.BaseEvent;
 import com.extjs.gxt.ui.client.event.ButtonEvent;
+import com.extjs.gxt.ui.client.event.Events;
 import com.extjs.gxt.ui.client.event.Listener;
 import com.extjs.gxt.ui.client.store.ListStore;
 import com.extjs.gxt.ui.client.widget.Component;
+import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.gwt.user.client.ui.AbstractImagePrototype;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
@@ -68,8 +74,17 @@ import org.sigmah.client.event.handler.OfflineHandler;
 import org.sigmah.client.ui.notif.ConfirmCallback;
 import org.sigmah.client.ui.notif.N10N;
 import org.sigmah.client.ui.zone.Zone;
+import org.sigmah.client.util.profiler.Checkpoint;
+import org.sigmah.client.util.profiler.Execution;
+import org.sigmah.client.util.profiler.ExecutionAsyncDAO;
+import org.sigmah.client.util.profiler.Profiler;
+import org.sigmah.client.util.profiler.Scenario;
 import org.sigmah.offline.status.ApplicationState;
 import org.sigmah.offline.sync.UpdateDates;
+import org.sigmah.shared.command.SendProbeReport;
+import org.sigmah.shared.command.result.Result;
+import org.sigmah.shared.dto.profile.CheckPointDTO;
+import org.sigmah.shared.dto.profile.ExecutionDTO;
 
 /**
  * Dashboard page presenter.
@@ -153,7 +168,7 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 		 * 
 		 * @return The OrgUnit tree grid component.
 		 */
-		HasTreeGrid<OrgUnitDTO> getOrgUnitsTreeGrid();
+		OrgUnitTreeGrid getOrgUnitsTreeGrid();
 
 		/**
 		 * Sets the org units panel header title.
@@ -161,7 +176,14 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 		 * @param title
 		 *          The new title.
 		 */
-		void setOrgUnitsPanelTitle(String title);
+		void setPanelsTitleSuffix(String title);
+
+		/**
+		 * Returns the {@link ContactsListWidget} widget.
+		 *
+		 * @return The contacts list widget.
+		 */
+		ContactsListWidget getContactsList();
 
 		/**
 		 * Returns the {@link ProjectsListWidget} widget.
@@ -173,6 +195,8 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 	}
 	
 	private Integer lastUserId;
+	
+	private final ExecutionAsyncDAO executionAsyncDAO = new ExecutionAsyncDAO();
 	
 	/**
 	 * Presenters's initialization.
@@ -210,6 +234,22 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 			}
 		});
 
+		if (auth().getSecondaryOrgUnitIds().isEmpty()) {
+			view.getOrgUnitsTreeGrid().getDisplayOnlyMainOrgUnitCheckbox().setVisible(false);
+		} else {
+			view.getOrgUnitsTreeGrid().getDisplayOnlyMainOrgUnitCheckbox().setValue(true);
+			view.getOrgUnitsTreeGrid().getDisplayOnlyMainOrgUnitCheckbox().addListener(Events.Change, new Listener<BaseEvent>() {
+				@Override
+				public void handleEvent(BaseEvent event) {
+					loadReminders();
+					loadMonitoredPoints();
+					loadContacts();
+					loadProjects(true);
+					loadOrgUnits();
+				}
+			});
+		}
+
 		// Projects widget initialization.
 		view.getProjectsList().init(RefreshMode.ON_FIRST_TIME, LoadingMode.CHUNK);
 		
@@ -217,6 +257,7 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
         view.setReminderOrMonitoredPointHandler(new ReminderOrMonitoredPointHandler() {
             @Override
             public void onLabelClickEvent(Integer projectId) {
+				Profiler.INSTANCE.startScenario(Scenario.OPEN_PROJECT);
                 eventBus.navigateRequest(Page.PROJECT_DASHBOARD.requestWith(RequestParameter.ID, projectId));
             }
         });
@@ -250,8 +291,11 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 		// Reloads OrgUnits.
 		loadOrgUnits();
 
+		// Reloads contacts.
+		loadContacts();
+
 		// Reloads projects.
-		view.getProjectsList().refresh(true, auth().getOrgUnitId());
+		loadProjects(false);
 		
 		// Ask the user to synchronize its favorite projects.
 		// BUGFIX #701: only showing this message if the user is online.
@@ -286,8 +330,9 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 	 * Performs a dispatch command to load the reminders list and populates the view store.
 	 */
 	private void loadReminders() {
+		Set<Integer> orgUnitIds = getOrgUnitIds();
 
-		dispatch.execute(new GetReminders(ReminderDTO.Mode.BASE), new CommandResultHandler<ListResult<ReminderDTO>>() {
+		dispatch.execute(new GetReminders(ReminderDTO.Mode.BASE, orgUnitIds), new CommandResultHandler<ListResult<ReminderDTO>>() {
 
 			@Override
 			public void onCommandSuccess(final ListResult<ReminderDTO> result) {
@@ -319,8 +364,9 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 	 * Performs a dispatch command to load the monitored points list and populates the view store.
 	 */
 	private void loadMonitoredPoints() {
+		Set<Integer> orgUnitIds = getOrgUnitIds();
 
-		dispatch.execute(new GetMonitoredPoints(MonitoredPointDTO.Mode.BASE), new CommandResultHandler<ListResult<MonitoredPointDTO>>() {
+		dispatch.execute(new GetMonitoredPoints(MonitoredPointDTO.Mode.BASE, orgUnitIds), new CommandResultHandler<ListResult<MonitoredPointDTO>>() {
 
 			@Override
 			public void onCommandSuccess(final ListResult<MonitoredPointDTO> result) {
@@ -389,6 +435,7 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 			view.addMenuButton(I18N.CONSTANTS.importItem(), null, new ButtonClickHandler(Page.IMPORT_VALUES));
 		}
 		
+		
 		// TODO Handle other menus buttons.
 		// There are two ways to show these menus (authentication / profile).
 		// if (auth().isShowMenus()) {
@@ -412,19 +459,21 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 		final Page[] administrationPages = new Page[] {
 			Page.ADMIN_USERS, Page.ADMIN_ORG_UNITS, 
 			Page.ADMIN_PROJECTS_MODELS, Page.ADMIN_ORG_UNITS_MODELS, 
-			Page.ADMIN_REPORTS_MODELS, Page.ADMIN_CATEGORIES, 
-			Page.ADMIN_IMPORTATION_SCHEME, Page.ADMIN_PARAMETERS
+				Page.ADMIN_CONTACT_MODELS, Page.ADMIN_REPORTS_MODELS,
+				Page.ADMIN_CATEGORIES, Page.ADMIN_IMPORTATION_SCHEME,
+				Page.ADMIN_PARAMETERS
 		};
 		
 		final GlobalPermissionEnum[] accessRights = new GlobalPermissionEnum[] {
 			GlobalPermissionEnum.MANAGE_USERS, GlobalPermissionEnum.MANAGE_ORG_UNITS,
 			GlobalPermissionEnum.MANAGE_PROJECT_MODELS, GlobalPermissionEnum.MANAGE_ORG_UNIT_MODELS,
-			GlobalPermissionEnum.MANAGE_REPORT_MODELS, GlobalPermissionEnum.MANAGE_CATEGORIES,
-			GlobalPermissionEnum.MANAGE_IMPORTATION_SCHEMES, GlobalPermissionEnum.MANAGE_SETTINGS
+				GlobalPermissionEnum.MANAGE_CONTACT_MODELS, GlobalPermissionEnum.MANAGE_REPORT_MODELS,
+				GlobalPermissionEnum.MANAGE_CATEGORIES, GlobalPermissionEnum.MANAGE_IMPORTATION_SCHEMES,
+				GlobalPermissionEnum.MANAGE_SETTINGS
 		};
 		
 		for(int index = 0; index < accessRights.length; index++) {
-			if(ProfileUtils.isGranted(auth(), accessRights[index])) {
+			if (accessRights[index] == null || ProfileUtils.isGranted(auth(), accessRights[index])) {
 				return administrationPages[index];
 			}
 		}
@@ -464,22 +513,55 @@ public class DashboardPresenter extends AbstractPagePresenter<DashboardPresenter
 		}
 	}
 
+	private void loadContacts() {
+		if (view.getContactsList() != null) {
+			view.getContactsList().refresh(view.getOrgUnitsTreeGrid().getDisplayOnlyMainOrgUnitCheckbox().getValue());
+		}
+	}
+
+	private void loadProjects(boolean forceRefresh) {
+		if (view.getOrgUnitsTreeGrid().getDisplayOnlyMainOrgUnitCheckbox().getValue()) {
+			view.getProjectsList().refresh(true, forceRefresh, auth().getMainOrgUnitId());
+		} else {
+			view.getProjectsList().refresh(true, forceRefresh, auth().getOrgUnitIds().toArray(new Integer[auth().getOrgUnitIds().size()]));
+		}
+	}
+
 	/**
 	 * Retrieves OrgUnits and populates tree grid store.
 	 */
 	private void loadOrgUnits() {
-
-		dispatch.execute(new GetOrgUnit(auth().getOrgUnitId(), OrgUnitDTO.Mode.WITH_TREE), new CommandResultHandler<OrgUnitDTO>() {
-
+		Set<Integer> orgUnitIds = getOrgUnitIds();
+		dispatch.execute(new GetOrgUnits(orgUnitIds, OrgUnitDTO.Mode.WITH_TREE), new CommandResultHandler<ListResult<OrgUnitDTO>>() {
 			@Override
-			public void onCommandSuccess(final OrgUnitDTO result) {
-
-				view.setOrgUnitsPanelTitle(I18N.CONSTANTS.orgunitTree() + " - " + result.getName() + " (" + result.getFullName() + ")");
+			public void onCommandSuccess(final ListResult<OrgUnitDTO> result) {
 				view.getOrgUnitsTreeGrid().getStore().removeAll();
-				view.getOrgUnitsTreeGrid().getStore().add(result, true);
-				view.getOrgUnitsTreeGrid().getTreeGrid().setExpanded(view.getOrgUnitsTreeGrid().getStore().getRootItems().get(0), true, false);
+				view.getOrgUnitsTreeGrid().getStore().add(result.getData(), true);
+				for (OrgUnitDTO orgUnitDTO : view.getOrgUnitsTreeGrid().getStore().getRootItems()) {
+					view.getOrgUnitsTreeGrid().getTreeGrid().setExpanded(orgUnitDTO, true, false);
+				}
+
+				OrgUnitDTO mainOrgUnitDTO = view.getOrgUnitsTreeGrid().getStore().findModel(OrgUnitDTO.ID, auth().getMainOrgUnitId());
+				String panelTitle = " - ";
+				if (auth().getSecondaryOrgUnitIds().isEmpty()) {
+					panelTitle += mainOrgUnitDTO.getName() + " (" + mainOrgUnitDTO.getFullName() + ")";
+				} else if (view.getOrgUnitsTreeGrid().getDisplayOnlyMainOrgUnitCheckbox().getValue()) {
+					panelTitle += I18N.CONSTANTS.myMainOrganisationalUnitPanelTitle() + " " + mainOrgUnitDTO.getName() + " (" + mainOrgUnitDTO.getFullName() + ")";
+				} else {
+					panelTitle += I18N.CONSTANTS.allMyOrganisationalUnitsPanelTitle();
+				}
+				view.setPanelsTitleSuffix(panelTitle);
 			}
 		});
 	}
 
+	Set<Integer> getOrgUnitIds() {
+		Set<Integer> orgUnitIds = new HashSet<Integer>();
+		if (view.getOrgUnitsTreeGrid().getDisplayOnlyMainOrgUnitCheckbox().getValue()) {
+			orgUnitIds.add(auth().getMainOrgUnitId());
+		} else {
+			orgUnitIds.addAll(auth().getOrgUnitIds());
+		}
+		return orgUnitIds;
+	}
 }

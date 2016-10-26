@@ -23,34 +23,29 @@ package org.sigmah.server.service;
  */
 
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import javax.persistence.NoResultException;
 import javax.persistence.Query;
 
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
+
+import org.sigmah.client.ui.presenter.CreateProjectPresenter;
 import org.sigmah.client.ui.presenter.project.logframe.ProjectLogFramePresenter;
 import org.sigmah.server.dispatch.impl.UserDispatch.UserExecutionContext;
-import org.sigmah.server.domain.Country;
-import org.sigmah.server.domain.OrgUnit;
-import org.sigmah.server.domain.Phase;
-import org.sigmah.server.domain.PhaseModel;
-import org.sigmah.server.domain.Project;
-import org.sigmah.server.domain.ProjectFunding;
-import org.sigmah.server.domain.ProjectModel;
-import org.sigmah.server.domain.User;
-import org.sigmah.server.domain.UserDatabase;
+import org.sigmah.server.domain.*;
 import org.sigmah.server.domain.calendar.PersonalCalendar;
 import org.sigmah.server.domain.element.BudgetElement;
-import org.sigmah.server.domain.element.BudgetSubField;
+import org.sigmah.server.domain.element.BudgetRatioElement;
+import org.sigmah.server.domain.element.DefaultFlexibleElement;
+import org.sigmah.server.domain.element.FlexibleElement;
 import org.sigmah.server.domain.layout.LayoutConstraint;
 import org.sigmah.server.domain.layout.LayoutGroup;
 import org.sigmah.server.domain.logframe.LogFrame;
 import org.sigmah.server.domain.logframe.LogFrameGroup;
 import org.sigmah.server.domain.logframe.LogFrameModel;
+import org.sigmah.server.domain.profile.Profile;
 import org.sigmah.server.domain.reminder.MonitoredPointList;
 import org.sigmah.server.domain.reminder.ReminderList;
 import org.sigmah.server.domain.value.Value;
@@ -59,31 +54,15 @@ import org.sigmah.server.service.base.AbstractEntityService;
 import org.sigmah.server.service.util.PropertyMap;
 import org.sigmah.shared.dispatch.CommandException;
 import org.sigmah.shared.dto.ProjectDTO;
+import org.sigmah.shared.dto.ProjectFundingDTO;
 import org.sigmah.shared.dto.base.EntityDTO;
-import org.sigmah.shared.dto.element.BudgetSubFieldDTO;
-import org.sigmah.shared.dto.referential.AmendmentState;
-import org.sigmah.shared.dto.referential.BudgetSubFieldType;
-import org.sigmah.shared.dto.referential.LogFrameGroupType;
-import org.sigmah.shared.dto.referential.ProjectModelStatus;
-import org.sigmah.shared.util.ValueResultUtils;
+import org.sigmah.shared.dto.referential.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.inject.Inject;
-import com.google.inject.Injector;
-import com.google.inject.Singleton;
-import com.google.inject.persist.Transactional;
-import java.util.HashSet;
-import java.util.Set;
-import org.sigmah.client.ui.presenter.CreateProjectPresenter;
-import org.sigmah.server.domain.HistoryToken;
-import org.sigmah.server.domain.element.DefaultFlexibleElement;
-import org.sigmah.shared.dto.ProjectFundingDTO;
-import org.sigmah.shared.dto.referential.ValueEventChangeType;
-
 /**
  * {@link Project} service.
- * 
+ *
  * @author Alexander (v1.3)
  * @author Denis Colliot (dcolliot@ideia.fr) (v2.0)
  */
@@ -96,26 +75,16 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 	private static final Logger LOG = LoggerFactory.getLogger(ProjectService.class);
 
 	/**
-	 * Application injector.
-	 */
-	private final Injector injector;
-
-	/**
 	 * Project mapper.
 	 */
 	@Inject
 	private ProjectMapper projectMapper;
-	
+
 	/**
 	 * Project funding service.
 	 */
 	@Inject
 	private ProjectFundingService fundingService;
-
-	@Inject
-	public ProjectService(final Injector injector) {
-		this.injector = injector;
-	}
 
 	/**
 	 * {@inheritDoc}
@@ -209,6 +178,10 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 		project.setProjectModel(model);
 		project.setLogFrame(null);
 
+		// Let's add default team member profiles
+		List<Profile> defaultTeamMemberProfiles = new ArrayList<>(model.getDefaultTeamMemberProfiles());
+		project.setTeamMemberProfiles(defaultTeamMemberProfiles);
+
 		// Creates and adds phases.
 		for (final PhaseModel phaseModel : model.getPhaseModels()) {
 
@@ -263,28 +236,28 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 		// Updates the project with a default log frame.
 		final LogFrame logFrame = createDefaultLogFrame(project);
 		project.setLogFrame(logFrame);
-		
+
 		// Create the budget values
 		final Double budgetPlanned = properties.<Double> get(ProjectDTO.BUDGET);
 		final String budgetValue;
 		if (budgetPlanned != null) {
-			budgetValue = createBudgetValues(budgetPlanned, model, project, user);
+			budgetValue = createPlannedBudgetValue(budgetPlanned, model, project, user);
 		} else {
 			budgetValue = null;
 		}
-		
+
 		// Updates the project
 		project = em().merge(project);
-		
+
 		// Create initials history tokens
 		// BUGFIX #729 & #784
 		createInitialHistoryTokens(project, budgetValue, user);
-		
+
 		// Create links (if requested)
 		final ProjectDTO baseProject = properties.get(ProjectDTO.BASE_PROJECT);
 		if(baseProject != null) {
 			final CreateProjectPresenter.Mode mode = properties.get(ProjectDTO.CREATION_MODE);
-			
+
 			if(mode == CreateProjectPresenter.Mode.FUNDING_ANOTHER_PROJECT) {
 				// Sets the funding parameters.
 				final Map<String, Object> parameters = new HashMap<String, Object>();
@@ -315,53 +288,44 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 
 		return project;
 	}
-	
+
 	/**
-	 * Create the required budget values.
-	 * 
-	 * @param budgetPlanned Planned budget. Null values will result in a NullPointerException.
-	 * @param model Project model to read.
-	 * @param project Project to edit.
-	 * @param user User creating the project.
+	 * Create the planned budget initial value.
+	 *
+	 * @param budgetPlanned
+	 *			Planned budget. <code>null</code> value will result in a <code>NullPointerException</code>.
+	 * @param model
+	 *			Project model to read.
+	 * @param project
+	 *			Project to edit.
+	 * @param user
+	 *			User creating the project.
+	 * @return  The saved value.
 	 */
-	private String createBudgetValues(Double budgetPlanned, ProjectModel model, Project project, final User user) {
-		final String budgetValue;
+	private String createPlannedBudgetValue(final Double budgetPlanned, final ProjectModel model, final Project project, final User user) {
 		
-		final Map<BudgetSubFieldDTO, Double> budgetValues = new HashMap<BudgetSubFieldDTO, Double>();
-		
-		final BudgetElement budgetElement = getBudgetElement(model);
-		if (budgetElement != null) {
-			for (BudgetSubField budgetSubField : budgetElement.getBudgetSubFields()) {
-				BudgetSubFieldDTO budgetSubFieldDTO = new BudgetSubFieldDTO();
-				budgetSubFieldDTO.setId(budgetSubField.getId());
-				if (BudgetSubFieldType.PLANNED == budgetSubField.getType()) {
-					budgetValues.put(budgetSubFieldDTO, budgetPlanned);
-				} else {
-					budgetValues.put(budgetSubFieldDTO, 0.0);
-				}
-			}
-			
-			budgetValue = ValueResultUtils.mergeElements(budgetValues);
-			
-			final Value value = new Value();
-			value.setContainerId(project.getId());
-			value.setElement(budgetElement);
-			value.setLastModificationAction('C');
-			value.setLastModificationDate(new Date());
-			value.setLastModificationUser(user);
-			value.setValue(budgetValue);
-			em().persist(value);
-			
-		} else {
-			budgetValue = null;
+		final BudgetRatioElement budgetRatioElement = model.getFirstElementOfType(BudgetRatioElement.class);
+		if (budgetRatioElement == null || budgetRatioElement.getPlannedBudget() == null) {
+			return null;
 		}
+		
+		final String budgetValue = budgetPlanned.toString();
+		
+		final Value value = new Value();
+		value.setContainerId(project.getId());
+		value.setElement(budgetRatioElement.getPlannedBudget());
+		value.setLastModificationAction('C');
+		value.setLastModificationDate(new Date());
+		value.setLastModificationUser(user);
+		value.setValue(budgetValue);
+		em().persist(value);
 		
 		return budgetValue;
 	}
 	
 	/**
 	 * Creates a well-configured default log frame for the new project.
-	 * 
+	 *
 	 * @param project
 	 *          The project.
 	 * @return The log frame.
@@ -420,68 +384,73 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 
 		return logFrame;
 	}
-	
+
 	/**
 	 * Creates an history token for each default flexible element.
-	 * 
+	 *
 	 * @param project
 	 *			Created project.
 	 * @param budgetValue
 	 *			Budget value (can be <code>null</code>).
-	 * @param user 
+	 * @param user
 	 *			User creating the project.
 	 */
-	private void createInitialHistoryTokens(Project project, String budgetValue, User user) {
-		for(final DefaultFlexibleElement element : getDefaultElements(project)) {
+	private void createInitialHistoryTokens(final Project project, final String budgetValue, final User user) {
+		
+		for (final DefaultFlexibleElement element : getDefaultElements(project)) {
+			final Integer elementId;
 			final String value;
-			
-			if(element instanceof BudgetElement) {
+
+			if (element instanceof BudgetRatioElement) {
 				value = budgetValue;
+				final FlexibleElement plannedBudgetElement = ((BudgetRatioElement) element).getPlannedBudget();
+				elementId = plannedBudgetElement != null ? plannedBudgetElement.getId() : null;
 			} else {
 				value = element.getValue(project);
+				elementId = element.getId();
 			}
-			
-			if(value != null) {
+
+			if (value != null && elementId != null) {
 				final HistoryToken historyToken = new HistoryToken();
-				
+
 				historyToken.setDate(new Date());
-				historyToken.setElementId(element.getId());
+				historyToken.setElementId(elementId);
 				historyToken.setProjectId(project.getId());
 				historyToken.setType(ValueEventChangeType.ADD);
 				historyToken.setUser(user);
 				historyToken.setValue(value);
-				
+
 				em().persist(historyToken);
 			}
 		}
 	}
-	
+
 	/**
 	 * Find every default element contained in the model of the given project.
-	 * 
+	 *
 	 * @param project Project to search.
 	 * @return A set of every default flexible element.
 	 */
 	private Set<DefaultFlexibleElement> getDefaultElements(Project project) {
 		final Set<DefaultFlexibleElement> defaultElements = new HashSet<>();
-		
+
 		for(final LayoutGroup layoutGroup : project.getProjectModel().getProjectDetails().getLayout().getGroups()) {
 			getDefaultElements(layoutGroup, defaultElements);
 		}
-		
+
 		for(final PhaseModel phaseModel : project.getProjectModel().getPhaseModels()) {
 			for(final LayoutGroup layoutGroup : phaseModel.getLayout().getGroups()) {
 				getDefaultElements(layoutGroup, defaultElements);
 			}
 		}
-		
+
 		return defaultElements;
 	}
-	
+
 	/**
 	 * Find every default flexible elements in the given layout group and add
 	 * them to the given set.
-	 * 
+	 *
 	 * @param layoutGroup Group tu search.
 	 * @param defaultElements Set to fill.
 	 */
@@ -495,7 +464,7 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 
 	/**
 	 * Searches the country for the given org unit.
-	 * 
+	 *
 	 * @param orgUnit
 	 *          The org unit.
 	 * @return The country
@@ -528,7 +497,7 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 
 	/**
 	 * Gets the default country for all the application.
-	 * 
+	 *
 	 * @return The default country.
 	 */
 	private Country getDefaultCountry() {
@@ -551,7 +520,7 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 
 	/**
 	 * Find the budget element of the given model.
-	 * 
+	 *
 	 * @param model Model to search.
 	 * @return An instance of <code>BudgetElement</code> or <code>null</code> if
 	 *		   none was found.
@@ -659,11 +628,6 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 				for (ProjectFunding pf : listfundingsToDelete) {
 					em().remove(pf);
 				}
-				/*
-				 * [UserPermission trigger] Deletes related entries in UserPermission table after project deleted
-				 */
-				UserPermissionPolicy policy = injector.getInstance(UserPermissionPolicy.class);
-				policy.deleteUserPemissionByProject(entityId);
 			}
 		}
 
@@ -675,14 +639,6 @@ public class ProjectService extends AbstractEntityService<Project, Integer, Proj
 	 */
 	@Override
 	protected EntityDTO<?> handleMapping(final Project createdProject) throws CommandException {
-
-		if (createdProject.getPartners() != null) {
-			UserPermissionPolicy permissionPolicy = injector.getInstance(UserPermissionPolicy.class);
-			for (OrgUnit orgUnit : createdProject.getPartners()) {
-				permissionPolicy.updateUserPermissionByOrgUnit(orgUnit);
-				break;
-			}
-		}
 
 		final ProjectDTO mappedProject = projectMapper.map(createdProject, false);
 		mappedProject.setSpendBudget(0.0);

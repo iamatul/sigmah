@@ -25,16 +25,25 @@ package org.sigmah.server.service;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
 import org.sigmah.server.auth.SecureTokenGenerator;
+import org.sigmah.server.dao.ContactDAO;
+import org.sigmah.server.dao.ContactModelDAO;
+import org.sigmah.server.dao.OrgUnitDAO;
+import org.sigmah.server.dao.ProfileDAO;
 import org.sigmah.server.dao.UserDAO;
 import org.sigmah.server.dao.UserUnitDAO;
 import org.sigmah.server.dispatch.impl.UserDispatch.UserExecutionContext;
+import org.sigmah.server.domain.Contact;
+import org.sigmah.server.domain.ContactModel;
 import org.sigmah.server.domain.OrgUnit;
 import org.sigmah.server.domain.User;
 import org.sigmah.server.domain.profile.OrgUnitProfile;
@@ -45,11 +54,15 @@ import org.sigmah.server.security.Authenticator;
 import org.sigmah.server.service.base.AbstractEntityService;
 import org.sigmah.server.service.util.PropertyMap;
 import org.sigmah.shared.Language;
+import org.sigmah.shared.command.result.UserUnitsResult;
 import org.sigmah.shared.dispatch.CommandException;
 import org.sigmah.shared.dispatch.FunctionalException;
 import org.sigmah.shared.dispatch.FunctionalException.ErrorCode;
 import org.sigmah.shared.dto.UserDTO;
+import org.sigmah.shared.dto.UserUnitDTO;
 import org.sigmah.shared.dto.base.EntityDTO;
+import org.sigmah.shared.dto.profile.ProfileDTO;
+import org.sigmah.shared.dto.referential.ContactModelType;
 import org.sigmah.shared.dto.referential.EmailKey;
 import org.sigmah.shared.dto.referential.EmailKeyEnum;
 import org.sigmah.shared.dto.referential.EmailType;
@@ -77,14 +90,22 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 
 	private final Injector injector;
 	private final Mapper mapper;
+	private final ContactDAO contactDAO;
+	private final ContactModelDAO contactModelDAO;
+	private final OrgUnitDAO orgUnitDAO;
+	private final ProfileDAO profileDAO;
 	private final UserDAO userDAO;
 	private final UserUnitDAO userUnitDAO;
 	private final MailService mailService;
 	private final Authenticator authenticator;
 
 	@Inject
-	public UserService(Injector injector, UserDAO userDAO, UserUnitDAO userUnitDAO, MailService mailService, Mapper mapper, Authenticator authenticator) {
+	public UserService(Injector injector, ContactDAO contactDAO, ContactModelDAO contactModelDAO, OrgUnitDAO orgUnitDAO, ProfileDAO profileDAO, UserDAO userDAO, UserUnitDAO userUnitDAO, MailService mailService, Mapper mapper, Authenticator authenticator) {
 		this.injector = injector;
+		this.contactDAO = contactDAO;
+		this.contactModelDAO = contactModelDAO;
+		this.orgUnitDAO = orgUnitDAO;
+		this.profileDAO = profileDAO;
 		this.userDAO = userDAO;
 		this.userUnitDAO = userUnitDAO;
 		this.mailService = mailService;
@@ -102,8 +123,6 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 
 		User userToPersist;
 		User userFound = null;
-		OrgUnitProfile orgUnitProfileToPersist;
-		OrgUnitProfile orgUnitProfileFound = null;
 
 		// get User that need to be saved from properties
 		final Integer id = properties.get(UserDTO.ID);
@@ -112,8 +131,7 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 		final String firstName = properties.get(UserDTO.FIRST_NAME);
 		final Language language = properties.get(UserDTO.LOCALE);
 		String password = properties.get(UserDTO.PASSWORD);
-		final Integer orgUnitId = (Integer) properties.get(UserDTO.ORG_UNIT);
-		final Collection<Integer> profilesIds = properties.get(UserDTO.PROFILES);
+		UserUnitsResult userUnits = properties.get(UserDTO.USER_UNITS);
 
 		if (email == null && name == null) {
 			throw new IllegalArgumentException("Invalid argument.");
@@ -122,9 +140,6 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 		// Saves user.
 		if(id != null) {
 			userFound = userDAO.findById(id);
-		}
-		if (userFound != null && userUnitDAO.doesOrgUnitProfileExist(userFound)) {
-			orgUnitProfileFound = userUnitDAO.findOrgUnitProfileByUser(userFound);
 		}
 
 		userToPersist = createNewUser(email, name, language.getLocale());
@@ -141,6 +156,7 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 		}
 
 		if (userFound != null && userFound.getId() != null) {
+			userToPersist.setOrgUnitsWithProfiles(userUnitDAO.findAllOrgUnitProfilesByUserId(userFound.getId()));
 			// Updates user.
 			userToPersist.setId(userFound.getId());
 			// BUGFIX #736 : Keeping the active state of modified users.
@@ -156,7 +172,7 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 
 			password = authenticator.generatePassword();
 			userToPersist.setHashedPassword(authenticator.hashPassword(password));
-			userDAO.persist(userToPersist, executingUser);
+			userToPersist = userDAO.persist(userToPersist, executingUser);
 
 			try {
 
@@ -177,36 +193,59 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 					LOG.debug("Error occured during invitation email sending. Continuing user creation process anyway.", e);
 				}
 			}
+
+			Integer contactId = properties.get(UserDTO.CONTACT);
+			if (contactId != null) {
+				// It means that the user was created from a contact
+				// Let's remove all duplicated properties which should stay in user entity
+				Contact contact = contactDAO.findById(contactId);
+				contact.setName(null);
+				contact.setFirstname(null);
+				contact.setMainOrgUnit(null);
+				contact.setSecondaryOrgUnits(new ArrayList<OrgUnit>());
+				// Now let's link the contact with the user
+				contact.setUser(userToPersist);
+				contactDAO.persist(contact, context.getUser());
+			} else {
+				// Let's create a contact for this user
+				ContactModel contactModel = contactModelDAO.findById((Integer) properties.get(UserDTO.CONTACT_MODEL));
+				Contact parent = contactDAO.findById((Integer) properties.get(UserDTO.CONTACT_ORGANIZATION));
+				Contact contact = new Contact();
+				contact.setUser(userToPersist);
+				contact.setContactModel(contactModel);
+				contact.setParent(parent);
+				contact.setDateCreated(new Date());
+				contactDAO.persist(contact, context.getUser());
+			}
 		}
 
 		// update link to profile
 		if (userToPersist.getId() != null) {
-			if (userFound != null && userFound.getId() != null && userFound.getId() > 0 && orgUnitProfileFound != null) {
-				orgUnitProfileToPersist = orgUnitProfileFound;
-			} else {
-				orgUnitProfileToPersist = new OrgUnitProfile();
+			// Needs to remove all subs profiles to avoid orphan entities
+			while (!userToPersist.getOrgUnitsWithProfiles().isEmpty()) {
+				userToPersist.getOrgUnitsWithProfiles().get(0).getProfiles().removeAll(userToPersist.getOrgUnitsWithProfiles().get(0).getProfiles());
+				userToPersist.getOrgUnitsWithProfiles().remove(0);
 			}
+			userToPersist.getOrgUnitsWithProfiles().removeAll(userToPersist.getOrgUnitsWithProfiles());
 
-			OrgUnit orgUnit = em().find(OrgUnit.class, orgUnitId);
-			if (orgUnit != null) {
-				orgUnitProfileToPersist.setOrgUnit(orgUnit);
-
-				List<Profile> profilesToPersist = new ArrayList<Profile>();
-				for (int profileId : profilesIds) {
-					Profile profile = em().find(Profile.class, profileId);
-					profilesToPersist.add(profile);
-				}
-				orgUnitProfileToPersist.setProfiles(profilesToPersist);
-				orgUnitProfileToPersist.setUser(userToPersist);
-				if (userFound != null && userFound.getId() != null && userFound.getId() > 0 && orgUnitProfileFound != null) {
-					orgUnitProfileToPersist = em().merge(orgUnitProfileToPersist);
-				} else {
-					em().persist(orgUnitProfileToPersist);
-				}
-				if (orgUnitProfileToPersist.getId() != null && orgUnitProfileToPersist.getId() > 0) {
-					userToPersist.setOrgUnitWithProfiles(orgUnitProfileToPersist);
-				}
+			OrgUnitProfile mainOrgUnitProfile = createOrUpdateUserUnit(userUnits.getMainUserUnit(), userToPersist);
+			if (mainOrgUnitProfile == null) {
+				throw new IllegalStateException("A main orgUnit profile should be provided.");
 			}
+			userToPersist.getOrgUnitsWithProfiles().add(mainOrgUnitProfile);
+
+			// Avoid duplicates by checking the OrgUnit id of each UserUnit
+			Set<Integer> orgUnitIds = new HashSet<>();
+			orgUnitIds.add(userUnits.getMainUserUnit().getOrgUnit().getId());
+			for (UserUnitDTO userUnitDTO : userUnits.getSecondaryUserUnits()) {
+				if (!orgUnitIds.add(userUnitDTO.getOrgUnit().getId())) {
+					continue;
+				}
+
+				OrgUnitProfile secondaryOrgUnitProfile = createOrUpdateUserUnit(userUnitDTO, userToPersist);
+				userToPersist.getOrgUnitsWithProfiles().add(secondaryOrgUnitProfile);
+				}
+			userToPersist = userDAO.persist(userToPersist, context.getUser());
 		}
 
 		return userToPersist;
@@ -225,11 +264,6 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 			userPersisted.setIdd(createdUser.getId());
 		}
 
-		if (userPersisted != null) {
-			// [UserPermission trigger] Updates UserPermission table after user creation/modification.
-			injector.getInstance(UserPermissionPolicy.class).updateUserPermissionByUser(userPersisted.getIdd());
-		}
-
 		return userPersisted;
 	}
 
@@ -239,6 +273,35 @@ public class UserService extends AbstractEntityService<User, Integer, UserDTO> {
 	@Override
 	public User update(Integer entityId, PropertyMap changes, final UserExecutionContext context) {
 		throw new UnsupportedOperationException("No policy update operation implemented for '" + entityClass.getSimpleName() + "' entity.");
+	}
+
+	private OrgUnitProfile createOrUpdateUserUnit(UserUnitDTO userUnitDTO, User user) {
+		OrgUnitProfile orgUnitProfile = new OrgUnitProfile();
+		if (userUnitDTO.getMainUserUnit()) {
+			orgUnitProfile.setType(OrgUnitProfile.OrgUnitProfileType.MAIN);
+		} else {
+			orgUnitProfile.setType(OrgUnitProfile.OrgUnitProfileType.SECONDARY);
+		}
+
+		orgUnitProfile.setUser(user);
+
+		// Apply the new orgUnit
+		Integer orgUnitId = userUnitDTO.getOrgUnit().getId();
+		orgUnitProfile.setOrgUnit(orgUnitDAO.findById(orgUnitId));
+
+		// Apply the new profiles
+		Set<Integer> profileIds = new HashSet<>();
+		for (ProfileDTO profileDTO : userUnitDTO.getProfiles()) {
+			if (profileDTO == null) {
+				continue;
+			}
+
+			profileIds.add(profileDTO.getId());
+		}
+
+		orgUnitProfile.setProfiles(profileDAO.findByIds(profileIds));
+
+		return orgUnitProfile;
 	}
 
 	/**

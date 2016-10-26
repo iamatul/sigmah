@@ -64,12 +64,15 @@ import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
 import org.sigmah.client.ui.presenter.reminder.ReminderType;
+import org.sigmah.client.util.profiler.Profiler;
+import org.sigmah.client.util.profiler.Scenario;
 import org.sigmah.shared.dto.calendar.CalendarIdentifier;
 import org.sigmah.shared.dto.calendar.PersonalCalendarIdentifier;
+import org.sigmah.shared.util.ProjectUtils;
 
 /**
  * Calendar widget presenter.
- * 
+ *
  * @author Denis Colliot (dcolliot@ideia.fr)
  */
 public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View> {
@@ -115,7 +118,7 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 
 	/**
 	 * Presenters's initialization.
-	 * 
+	 *
 	 * @param view
 	 *          Presenter's view interface.
 	 * @param injector
@@ -158,7 +161,7 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 			@Override
 			public void delete(final Event event, final CalendarWidget calendarWidget) {
 				final CalendarIdentifier calendarIdentifier = event.getParent().getIdentifier();
-				final Integer parentId = calendarIdentifier instanceof PersonalCalendarIdentifier ? 
+				final Integer parentId = calendarIdentifier instanceof PersonalCalendarIdentifier ?
 					((PersonalCalendarIdentifier)calendarIdentifier).getId() : null;
 
 				dispatch.execute(new Delete(PersonalEventDTO.ENTITY_NAME, event.getIdentifier(), parentId), new CommandResultHandler<VoidResult>() {
@@ -320,16 +323,19 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 
 	/**
 	 * Reloads the calendars data (if necessary).
-	 * 
+	 *
 	 * @param calendars
 	 *          The calendar types with their corresponding identifier.
 	 */
-	public void reload(final Map<CalendarType, Integer> calendars) {
+	public void reload(final Map<CalendarType, Integer> calendars, boolean editable) {
+		Profiler.INSTANCE.markCheckpoint(Scenario.AGENDA, "Before refresh.");
 
 		calendar.refresh();
+		Profiler.INSTANCE.markCheckpoint(Scenario.AGENDA, "calendar.refresh ended.");
         this.projectId = calendars.get(CalendarType.Activity);
 
-		view.setAddEventButtonEnabled(ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_PROJECT_AGENDA, GlobalPermissionEnum.EDIT_PROJECT));
+		view.setAddEventButtonEnabled(editable);
+		Profiler.INSTANCE.markCheckpoint(Scenario.AGENDA, "Before refresh.");
 		reloadEvents(calendars);
 	}
 
@@ -344,7 +350,7 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 
 	/**
 	 * Returns the {@link CalendarWrapper} list from the view store.
-	 * 
+	 *
 	 * @return The collection.
 	 */
 	private List<CalendarWrapper> getCalendars() {
@@ -361,7 +367,7 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 
 	/**
 	 * Reloads the calendar events using a {@link GetCalendar} command.
-	 * 
+	 *
 	 * @param calendars
 	 *          The calendar types with their corresponding identifier.
 	 */
@@ -371,6 +377,7 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 
 		if (ClientUtils.isEmpty(calendars)) {
 			calendar.refresh();
+			Profiler.INSTANCE.endScenario(Scenario.AGENDA);
 			return;
 		}
 
@@ -379,6 +386,7 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 			@Override
 			protected void onComplete() {
 				calendar.refresh();
+				Profiler.INSTANCE.endScenario(Scenario.AGENDA);
 			}
 		};
 
@@ -395,6 +403,7 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 
 				@Override
 				public void onCommandSuccess(final Calendar result) {
+					Profiler.INSTANCE.markCheckpoint(Scenario.AGENDA, calendarType + " ended.");
 					if(result != null) {
 						// Defines the color index of the calendar.
 						result.setStyle(calendarType.getColorCode());
@@ -404,9 +413,16 @@ public class CalendarPresenter extends AbstractPresenter<CalendarPresenter.View>
 						view.getCalendarsSelectionModel().select(view.getCalendarsStore().getCount() - 1, true);
 					}
 				}
+
+				@Override
+				protected void onCommandFailure(Throwable caught) {
+					Profiler.INSTANCE.markCheckpoint(Scenario.AGENDA, calendarType + " ended with error.");
+					super.onCommandFailure(caught); 
+				}
+				
 			});
 		}
-
+		Profiler.INSTANCE.markCheckpoint(Scenario.AGENDA, "Before queue started.");
 		queue.start();
 	}
     /**

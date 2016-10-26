@@ -32,7 +32,7 @@ import com.google.gwt.user.client.rpc.IsSerializable;
 
 /**
  * Page enumeration which values represent URL tokens.
- * 
+ *
  * @author Denis Colliot (dcolliot@ideia.fr)
  * @author Claire Yang (cyang@ideia.fr)
  * @author Tom Miette (tmiette@ideia.fr)
@@ -51,6 +51,7 @@ public enum Page implements IsSerializable {
 	PROJECT_EXPORTS_SETTING(Pages.PROJECT_PARENT_KEY, "exports-setting"),
 	PROJECT_AMENDMENT_RENAME(Pages.PROJECT_PARENT_KEY, "amendment-rename"),
 	PROJECT_AMENDMENT_DIFF(Pages.PROJECT_PARENT_KEY, "amendment-diff"),
+	PROJECT_TEAM_MEMBERS(Pages.PROJECT_PARENT_KEY, "team-members"),
 
 	REMINDER_EDIT("reminder-edit"),
 	REMINDER_HISTORY("reminder-history"),
@@ -66,10 +67,15 @@ public enum Page implements IsSerializable {
 	ORGUNIT_CALENDAR(Pages.ORGUNIT_PARENT_KEY, "calendar"),
 	ORGUNIT_REPORTS(Pages.ORGUNIT_PARENT_KEY, "reports"),
 
+	CONTACT_DASHBOARD(Pages.CONTACT_PARENT_KEY, "dashboard"),
+	CONTACT_EXPORTS(Pages.PROJECT_PARENT_KEY, "contact-exports"),
+	CONTACT_EXPORTS_SETTING(Pages.PROJECT_PARENT_KEY, "contact-exports-setting"),
+
 	ADMIN_USERS(Pages.ADMIN_PARENT_KEY, "users"),
 	ADMIN_ORG_UNITS(Pages.ADMIN_PARENT_KEY, "org-units"),
 	ADMIN_PROJECTS_MODELS(Pages.ADMIN_PARENT_KEY, "projects-models"),
 	ADMIN_ORG_UNITS_MODELS(Pages.ADMIN_PARENT_KEY, "org-units-models"),
+	ADMIN_CONTACT_MODELS(Pages.ADMIN_PARENT_KEY, "contact-models"),
 	ADMIN_REPORTS_MODELS(Pages.ADMIN_PARENT_KEY, "reports"),
 	ADMIN_CATEGORIES(Pages.ADMIN_PARENT_KEY, "categories"),
 	ADMIN_PARAMETERS(Pages.ADMIN_PARENT_KEY, "parameters"),
@@ -89,11 +95,12 @@ public enum Page implements IsSerializable {
 
 	ADMIN_ADD_PROJECT_MODEL("add-project-model"),
 	ADMIN_ADD_ORG_UNIT_MODEL("add-org-unit-model"),
+	ADMIN_ADD_CONTACT_MODEL("add-contact-model"),
 	ADMIN_EDIT_LAYOUT_GROUP_MODEL("layout-group-edit"),
 	ADMIN_EDIT_FLEXIBLE_ELEMENT("flexible-element-edit"),
 	ADMIN_EDIT_FLEXIBLE_ELEMENT_ADD_BUDGETSUBFIELD("add-budgetsubfield-flexible-element-edit"),
 	ADMIN_EDIT_PHASE_MODEL("phase-model-edit"),
-	
+
 	OFFLINE_SELECT_FILES("offline-select-files"),
 
 	// OTHER PAGES.
@@ -116,7 +123,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * Instantiates a new {@code Page} object.
-	 * 
+	 *
 	 * @param token
 	 *          The page token (must be unique).
 	 * @throws IllegalArgumentException
@@ -128,7 +135,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * Instantiates a new {@code Page} object with its title.
-	 * 
+	 *
 	 * @param parentKey
 	 *          The parent key.
 	 * @param token
@@ -142,7 +149,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * Instantiates a new {@code Page} object with its history configuration.
-	 * 
+	 *
 	 * @param token
 	 *          The page token (must be unique).
 	 * @param skipHistory
@@ -156,7 +163,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * Instantiates a new {@code Page} object with its title and history configuration.
-	 * 
+	 *
 	 * @param parentKey
 	 *          The parent key.
 	 * @param token
@@ -182,7 +189,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * Indicates if the page needs to be considered in the history.
-	 * 
+	 *
 	 * @return {@code true} if the page needs to be considered in the history, {@code false} otherwise.
 	 */
 	public boolean skipHistory() {
@@ -191,7 +198,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * Returns the parent key.
-	 * 
+	 *
 	 * @return The parent key.
 	 */
 	public String getParentKey() {
@@ -200,7 +207,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * Returns the page token.
-	 * 
+	 *
 	 * @return The page token.
 	 */
 	public String getToken() {
@@ -209,7 +216,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * Returns a new request for this page.
-	 * 
+	 *
 	 * @return A new {@link PageRequest} instance for the current page.
 	 */
 	public PageRequest request() {
@@ -218,7 +225,7 @@ public enum Page implements IsSerializable {
 
 	/**
 	 * A convenience method for calling {@code request().addParameter(name, value)}.
-	 * 
+	 *
 	 * @param name
 	 *          The URL parameter name.
 	 * @param value
@@ -239,9 +246,9 @@ public enum Page implements IsSerializable {
 	}
 
 	/**
-	 * Sets the page title.<br/>
+	 * Sets the page title.
 	 * If not {@code null}, this value will be returned by {@link #getTitle(Page)} method.
-	 * 
+	 *
 	 * @param pageTitle
 	 *          The new page title carried by this instance.
 	 */
@@ -262,7 +269,7 @@ public enum Page implements IsSerializable {
 	 * <li>Returns an error value containing the page token.</li>
 	 * </ol>
 	 * </p>
-	 * 
+	 *
 	 * @param page
 	 *          The {@link Page} instance.
 	 * @return The given {@code page} corresponding title, or {@code null}.
@@ -300,6 +307,8 @@ public enum Page implements IsSerializable {
 			case ADMIN_PROJECTS_MODELS:
 				return I18N.CONSTANTS.adminboard();
 			case ADMIN_ORG_UNITS_MODELS:
+				return I18N.CONSTANTS.adminboard();
+			case ADMIN_CONTACT_MODELS:
 				return I18N.CONSTANTS.adminboard();
 			case ADMIN_REPORTS_MODELS:
 				return I18N.CONSTANTS.adminboard();

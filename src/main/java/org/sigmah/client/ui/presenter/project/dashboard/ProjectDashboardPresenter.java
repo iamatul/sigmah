@@ -79,10 +79,13 @@ import com.google.inject.ImplementedBy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import org.sigmah.client.ui.view.project.dashboard.LinkedProjectsColumnsProvider;
+import org.sigmah.client.util.profiler.Profiler;
+import org.sigmah.client.util.profiler.Scenario;
+import org.sigmah.shared.util.ProjectUtils;
 
 /**
  * Project's Dashboard presenter which manages the {@link ProjectDashboardView}.
- * 
+ *
  * @author Denis Colliot (dcolliot@ideia.fr)
  * @author Tom Miette (tmiette@ideia.fr)
  */
@@ -97,7 +100,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 		/**
 		 * Provides specific handlers implementation to the view.
-		 * 
+		 *
 		 * @param handler
 		 *          The specific handlers implementation.
 		 */
@@ -117,7 +120,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 		/**
 		 * Updates the reminders and monitored points toolbars.
-		 * 
+		 *
 		 * @param canEditReminders
 		 *          {@code true} if the authenticated user is authorized to edit reminders.
 		 * @param canEditMonitoredPoints
@@ -131,7 +134,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 		/**
 		 * Updates the linked projects toolbars.
-		 * 
+		 *
 		 * @param canRelateProject
 		 *          {@code true} if the authenticated user is authorized to create relations between projects.
 		 * @param canCreateProject
@@ -158,7 +161,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 		Button getFundedProjectSelectButton();
 
 		Button getFundedProjectCreateButton();
-		
+
 		LinkedProjectsColumnsProvider getFundingProjectsColumnsProvider();
 
 		// --
@@ -173,7 +176,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 	/**
 	 * Presenter's specific handlers.
-	 * 
+	 *
 	 * @author Denis Colliot (dcolliot@ideia.fr)
 	 */
 	public static interface PresenterHandler {
@@ -196,7 +199,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 	/**
 	 * Presenters's initialization.
-	 * 
+	 *
 	 * @param view
 	 *          Presenter's view interface.
 	 * @param injector
@@ -301,7 +304,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 			@Override
 			public boolean isAuthorizedToEditReminder() {
 				// BUGFIX #741: Removed the need to have "EDIT_PROJECT" privilege to edit reminders.
-				return ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_ALL_REMINDERS) || 
+				return ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_ALL_REMINDERS) ||
 					ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_OWN_REMINDERS);
 			}
 
@@ -432,24 +435,24 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 					final ProjectFundingDTO linkedProject = event.getParam(1);
 
 					onLinkedProjectDeleteAction(linkedProjectType, linkedProject);
-					
+
 				} else if (event.concern(UpdateEvent.PROJECT_CREATE)) {
-					
+
 					// --
 					// On project creation event.
 					// --
-					
+
 					final CreateProjectPresenter.Mode mode = event.getParam(0);
-					
+
 					switch (mode) {
 						case FUNDING_ANOTHER_PROJECT:
 							loadLinkedProjects(LinkedProjectType.FUNDING_PROJECT);
 							break;
-							
+
 						case FUNDED_BY_ANOTHER_PROJECT:
 							loadLinkedProjects(LinkedProjectType.FUNDED_PROJECT);
 							break;
-							
+
 						default:
 							// Nothing to do.
 							break;
@@ -510,11 +513,11 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 		// --
 
 		final boolean canEditReminders =
-			ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_ALL_REMINDERS) || 
+			ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_ALL_REMINDERS) ||
 			ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_OWN_REMINDERS);
 
 		final boolean canEditMonitoredPoints =
-			ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_ALL_REMINDERS) || 
+			ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_ALL_REMINDERS) ||
 			ProfileUtils.isGranted(auth(), GlobalPermissionEnum.EDIT_OWN_REMINDERS);
 
 		view.updateRemindersToolbars(canEditReminders, canEditMonitoredPoints);
@@ -524,7 +527,8 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 		// --
 
 		final boolean canRelateProject = ProfileUtils.isGranted(auth(), GlobalPermissionEnum.RELATE_PROJECT);
-		final boolean canCreateProject = ProfileUtils.isGranted(auth(), GlobalPermissionEnum.CREATE_PROJECT, GlobalPermissionEnum.EDIT_PROJECT);
+		final boolean canCreateProject = ProfileUtils.isGranted(auth(), GlobalPermissionEnum.CREATE_PROJECT) &&
+			ProjectUtils.isProjectEditable(getProject(), auth());
 
 		view.updateLinkedProjectsToolbars(canRelateProject, canCreateProject);
 
@@ -548,7 +552,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 	@Override
 	protected void onViewRevealed() {
-		
+
 		// --
 		// Updates project tabs.
 		// --
@@ -635,7 +639,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 	/**
 	 * Loads the current project linked projects (i.e. funding / funded projects).
-	 * 
+	 *
 	 * @param linkedProjectType
 	 *          The linked projects type to load. Set to {@code null} to load all types.
 	 */
@@ -682,7 +686,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 	/**
 	 * Method executed on reminder update.
-	 * 
+	 *
 	 * @param edited
 	 *          The udpated reminder.
 	 */
@@ -731,7 +735,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 	/**
 	 * Method executed on monitored point update.
-	 * 
+	 *
 	 * @param edited
 	 *          The udpated monitored point.
 	 */
@@ -779,7 +783,7 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 	/**
 	 * Method executed on linked project action.
-	 * 
+	 *
 	 * @param linkedProjectType
 	 *          The deleted linked project type.
 	 * @param linkedProject
@@ -826,5 +830,5 @@ public class ProjectDashboardPresenter extends AbstractProjectPresenter<ProjectD
 
 		}, new LoadingMask(linkedProjectsGrid));
 	}
-	
+
 }

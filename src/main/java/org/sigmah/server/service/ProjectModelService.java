@@ -23,31 +23,27 @@ package org.sigmah.server.service;
  */
 
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+
 
 import org.sigmah.client.util.AdminUtil;
+import org.sigmah.server.dao.FrameworkDAO;
+import org.sigmah.server.dao.ProfileDAO;
 import org.sigmah.server.dao.ProjectModelDAO;
 import org.sigmah.server.dispatch.impl.UserDispatch.UserExecutionContext;
-import org.sigmah.server.domain.PhaseModel;
-import org.sigmah.server.domain.ProjectBanner;
-import org.sigmah.server.domain.ProjectDetails;
-import org.sigmah.server.domain.ProjectModel;
-import org.sigmah.server.domain.ProjectModelVisibility;
-import org.sigmah.server.domain.element.BudgetElement;
-import org.sigmah.server.domain.element.BudgetSubField;
+import org.sigmah.server.domain.*;
 import org.sigmah.server.domain.element.DefaultFlexibleElement;
 import org.sigmah.server.domain.layout.Layout;
 import org.sigmah.server.domain.layout.LayoutConstraint;
 import org.sigmah.server.domain.layout.LayoutGroup;
 import org.sigmah.server.domain.logframe.LogFrameModel;
+import org.sigmah.server.domain.profile.Profile;
 import org.sigmah.server.mapper.Mapper;
 import org.sigmah.server.service.base.AbstractEntityService;
 import org.sigmah.server.service.util.ModelUtil;
 import org.sigmah.server.service.util.PropertyMap;
 import org.sigmah.shared.dto.PhaseModelDTO;
 import org.sigmah.shared.dto.ProjectModelDTO;
-import org.sigmah.shared.dto.referential.BudgetSubFieldType;
 import org.sigmah.shared.dto.referential.DefaultFlexibleElementType;
 import org.sigmah.shared.dto.referential.ProjectModelStatus;
 import org.sigmah.shared.dto.referential.ProjectModelType;
@@ -58,10 +54,13 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import java.util.Date;
 import java.util.HashSet;
+import org.sigmah.server.computation.ServerDependencyResolver;
+import org.sigmah.server.domain.element.BudgetRatioElement;
+import org.sigmah.server.i18n.I18nServer;
 
 /**
  * Handler for updating Project model command.
- * 
+ *
  * @author nrebiai
  * @author Maxime Lombard (mlombard@ideia.fr)
  * @author Denis Colliot (dcolliot@ideia.fr)
@@ -80,12 +79,27 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 	@Inject
 	private Mapper mapper;
 
+	@Inject
+	private ModelUtil modelUtil;
+
 	/**
 	 * Injected {@link ProjectModelDAO}.
 	 */
 	@Inject
 	private ProjectModelDAO projectModelDAO;
-
+	
+	/**
+	 * Injected {@link I18nServer}. Handle localization of lables.
+	 */
+	@Inject
+	private I18nServer i18n;
+    
+	@Inject
+	private ProfileDAO profileDAO;
+	
+	@Inject
+	private FrameworkDAO frameworkDAO;
+	
 	/**
 	 * {@inheritDoc}
 	 */
@@ -137,32 +151,17 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 
 		// Default flexible elements all in default details group
 		int order = 0;
-		for (DefaultFlexibleElementType e : DefaultFlexibleElementType.values()) {
+		for (final DefaultFlexibleElementType type : DefaultFlexibleElementType.values()) {
 			DefaultFlexibleElement defaultElement;
-			if (DefaultFlexibleElementType.BUDGET.equals(e)) {
-				defaultElement = new BudgetElement();
-
-				List<BudgetSubField> budgetSubFields = new ArrayList<BudgetSubField>();
-				// Adds the 3 default budget sub fields
-				int y = 1;
-				for (BudgetSubFieldType type : BudgetSubFieldType.values()) {
-					BudgetSubField b = new BudgetSubField();
-					b.setBudgetElement(((BudgetElement) defaultElement));
-					b.setType(type);
-					b.setFieldOrder(y);
-					if (BudgetSubFieldType.PLANNED.equals(type)) {
-						((BudgetElement) defaultElement).setRatioDivisor(b);
-					} else if (BudgetSubFieldType.SPENT.equals(type)) {
-						((BudgetElement) defaultElement).setRatioDividend(b);
-					}
-					budgetSubFields.add(b);
-					y++;
-				}
-				((BudgetElement) defaultElement).setBudgetSubFields(budgetSubFields);
+			if (type == DefaultFlexibleElementType.BUDGET) {
+				continue;
+			} else if (type == DefaultFlexibleElementType.BUDGET_RATIO) {
+				defaultElement = new BudgetRatioElement();
+				defaultElement.setLabel(i18n.t(context.getLanguage(), "flexibleElementBudgetRatio"));
 			} else {
 				defaultElement = new DefaultFlexibleElement();
 			}
-			defaultElement.setType(e);
+			defaultElement.setType(type);
 			defaultElement.setValidates(false);
 			defaultElement.setAmendable(true);
 			em().persist(defaultElement);
@@ -251,7 +250,12 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 			model.setName((String) changes.get(AdminUtil.PROP_PM_NAME));
 		}
 		if (changes.get(AdminUtil.PROP_PM_STATUS) != null) {
-			model.setStatus((ProjectModelStatus) changes.get(AdminUtil.PROP_PM_STATUS));
+			final ProjectModelStatus newStatus = changes.get(AdminUtil.PROP_PM_STATUS);
+			if (frameworkDAO.countNotImplementedElementsByProjectModelId(model.getId()) > 0) {
+				throw new IllegalArgumentException("A framework requirement was not entirely fulfilled.");
+			}
+
+			model.setStatus(newStatus);
 		}
 		if (changes.get(AdminUtil.PROP_PM_USE) instanceof ProjectModelType) {
 			for (final ProjectModelVisibility v : model.getVisibilities()) {
@@ -267,6 +271,20 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 				model.setDateMaintenance((Date)maintenanceDate);
 			} else {
 				model.setDateMaintenance(null);
+			}
+		}
+		if (changes.containsKey(AdminUtil.PROP_PM_DEFAULT_TEAM_MEMBER_PROFILES)) {
+			Object defaultProfileIds = changes.get(AdminUtil.PROP_PM_DEFAULT_TEAM_MEMBER_PROFILES);
+			if (defaultProfileIds instanceof Set) {
+				Set<Integer> profileIds = (Set<Integer>) defaultProfileIds;
+				if (profileIds.isEmpty()) {
+					model.setDefaultTeamMemberProfiles(null);
+				} else {
+					List<Profile> profiles = profileDAO.findByIds(profileIds);
+					model.setDefaultTeamMemberProfiles(profiles);
+				}
+			} else {
+				model.setDefaultTeamMemberProfiles(null);
 			}
 		}
 
@@ -362,7 +380,8 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 
 		if (changes.get(AdminUtil.PROP_FX_FLEXIBLE_ELEMENT) != null) {
 
-			ModelUtil.persistFlexibleElement(em(), mapper, changes, model);
+			modelUtil.persistFlexibleElement(changes, model);
+
 			model = projectModelDAO.findById(model.getId());
 
 		}
@@ -380,20 +399,20 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 
 		if (phaseDTOToSave != null) {
 			PhaseModel phaseToSave;
-			
+
 			PhaseModel phaseFound = null;
 			for (final PhaseModel phase : model.getPhaseModels()) {
 				if (phaseDTOToSave.getId() != null && phaseDTOToSave.getId().equals(phase.getId())) {
 					phaseFound = phase;
 				}
 			}
-			
+
 			if(phaseFound != null) {
 				phaseToSave = phaseFound;
 			} else {
 				phaseToSave = new PhaseModel();
 			}
-			
+
 			phaseToSave.setName(phaseDTOToSave.getName());
 			if (displayOrder != null) {
 				phaseToSave.setDisplayOrder(displayOrder);
@@ -414,7 +433,7 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 					}
 				}
 			}
-			
+
 			for(final PhaseModel removedSuccessor : existingPhaseModels) {
 				phaseToSave.getSuccessors().remove(removedSuccessor);
 			}
@@ -445,7 +464,7 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 
 				phaseToSave.setLayout(phaseLayout);
 				em().persist(phaseToSave);
-				
+
 				model.addPhase(phaseToSave);
 			}
 
@@ -465,7 +484,7 @@ public class ProjectModelService extends AbstractEntityService<ProjectModel, Int
 
 	/**
 	 * Creates a new {@link LogFrameModel} from the given {@code model}.
-	 * 
+	 *
 	 * @param model
 	 *          The project model.
 	 * @return The {@link LogFrameModel} instance.

@@ -56,8 +56,8 @@ import org.sigmah.shared.dto.referential.TextAreaType;
  * Flexible element domain entity.
  * </p>
  * <p>
- * Uses a joined inheritance to map the different types of flexible elements.<br/>
- * Each type of element is stored in a kind of sub-table.<br/>
+ * Uses a joined inheritance to map the different types of flexible elements.
+ * Each type of element is stored in a kind of sub-table.
  * Each element, regardless of the type, is created with an unique identifier. This identifier is unique for all the
  * flexible element types. An element is retrieved by join instructions on sub-tables and a constraint on the
  * identifier.
@@ -205,8 +205,12 @@ public abstract class FlexibleElement extends AbstractEntityId<Integer> implemen
 			type = TextAreaType.fromCode(((TextAreaElement) this).getType());
 		} else if (this instanceof CheckboxElement) {
 			type = ElementTypeEnum.CHECKBOX;
+		} else if (this instanceof ContactListElement) {
+			type = ElementTypeEnum.CONTACT_LIST;
 		} else if (this instanceof DefaultFlexibleElement) {
 			type = ((DefaultFlexibleElement) this).getType();
+		} else if (this instanceof DefaultContactFlexibleElement) {
+			type = ((DefaultContactFlexibleElement) this).getType();
 		} else if (this instanceof FilesListElement) {
 			type = ElementTypeEnum.FILES_LIST;
 		} else if (this instanceof IndicatorsListElement) {

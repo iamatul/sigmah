@@ -23,28 +23,12 @@ package org.sigmah.server.domain;
  */
 
 
-import static com.extjs.gxt.ui.client.Style.SortDir.ASC;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
-import javax.persistence.OneToMany;
-import javax.persistence.OneToOne;
-import javax.persistence.OrderBy;
-import javax.persistence.Table;
-import javax.persistence.Temporal;
-import javax.persistence.TemporalType;
+import javax.persistence.*;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
@@ -54,7 +38,12 @@ import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.FilterDefs;
 import org.hibernate.annotations.Filters;
 import org.sigmah.server.domain.base.AbstractEntityId;
+import org.sigmah.server.domain.element.FlexibleElement;
+import org.sigmah.server.domain.layout.Layout;
+import org.sigmah.server.domain.layout.LayoutConstraint;
+import org.sigmah.server.domain.layout.LayoutGroup;
 import org.sigmah.server.domain.logframe.LogFrameModel;
+import org.sigmah.server.domain.profile.Profile;
 import org.sigmah.server.domain.util.Deleteable;
 import org.sigmah.server.domain.util.EntityConstants;
 import org.sigmah.server.domain.util.EntityFilters;
@@ -68,7 +57,7 @@ import org.sigmah.shared.dto.referential.ProjectModelType;
  * <p>
  * Note: entity corresponding client-side DTO should inherits {@code com.extjs.gxt.ui.client.data.BaseModelData}.
  * </p>
- * 
+ *
  * @author Denis Colliot (dcolliot@ideia.fr)
  */
 @Entity
@@ -105,7 +94,7 @@ public class ProjectModel extends AbstractEntityId<Integer> implements Deleteabl
 	@Enumerated(EnumType.STRING)
 	@NotNull
 	private ProjectModelStatus status;
-	
+
 	/**
      * The date on which this project model maintenance started or is going to start.
      */
@@ -139,7 +128,22 @@ public class ProjectModel extends AbstractEntityId<Integer> implements Deleteabl
 
 	@OneToMany(mappedBy = "model", cascade = CascadeType.ALL)
 	private List<ProjectModelVisibility> visibilities;
-	
+
+	@ManyToMany(cascade = CascadeType.ALL)
+	@JoinTable(
+			name = EntityConstants.PROJECT_MODEL_COLUMN_DEFAULT_TEAM_MEMBER_PROFILES_LINK_TABLE,
+			joinColumns = @JoinColumn(name = EntityConstants.PROJECT_MODEL_COLUMN_ID, referencedColumnName = EntityConstants.PROJECT_MODEL_COLUMN_ID),
+			inverseJoinColumns = @JoinColumn(name = EntityConstants.PROFILE_COLUMN_ID, referencedColumnName = EntityConstants.PROFILE_COLUMN_ID),
+			uniqueConstraints = @UniqueConstraint(columnNames = {
+					EntityConstants.PROJECT_MODEL_COLUMN_ID,
+					EntityConstants.PROFILE_COLUMN_ID
+			})
+	)
+	private List<Profile> defaultTeamMemberProfiles = new ArrayList<>();
+
+	@OneToMany(mappedBy = "projectModel", cascade = CascadeType.ALL)
+	private List<FrameworkFulfillment> frameworkFulfillments = new ArrayList<>();
+
 	public ProjectModel() {
 	}
 
@@ -151,7 +155,7 @@ public class ProjectModel extends AbstractEntityId<Integer> implements Deleteabl
 
 	/**
 	 * Adds the given {@code phaseModel} to the current project model.
-	 * 
+	 *
 	 * @param phaseModel
 	 *          The phase model. Does nothing if {@code null}.
 	 */
@@ -181,7 +185,7 @@ public class ProjectModel extends AbstractEntityId<Integer> implements Deleteabl
 	/**
 	 * Gets the type of this model for the given organization. If this model isn't visible for this organization,
 	 * <code>null</code> is returned.
-	 * 
+	 *
 	 * @param organization
 	 *          The organization.
 	 * @return The type of this model for the given organization, <code>null</code> otherwise.
@@ -213,7 +217,7 @@ public class ProjectModel extends AbstractEntityId<Integer> implements Deleteabl
 	public void resetImport() {
 		resetImport(false);
 	}
-	
+
 	/**
 	 * Reset the following identifiers of the object:
 	 * <ul>
@@ -223,7 +227,7 @@ public class ProjectModel extends AbstractEntityId<Integer> implements Deleteabl
 	 * <li>{@code projectDetails}</li>
 	 * <li>{@code logFrameModel}</li>
 	 * </ul>
-	 * 
+	 *
 	 * @param keepPrivacyGroups <code>true</code> to not reset privacy groups.
 	 */
 	public void resetImport(boolean keepPrivacyGroups) {
@@ -251,6 +255,56 @@ public class ProjectModel extends AbstractEntityId<Integer> implements Deleteabl
 		if (logFrameModel != null) {
 			logFrameModel.resetImport();
 		}
+	}
+	
+	/**
+	 * Returns the first flexible element matching the given type.
+	 * 
+	 * @param <E>
+	 *			Type of the flexible element to search.
+	 * @param elementType
+	 *			Class of the flexible element to search.
+	 * @return The first flexible element matching the given type or <code>null</code> if none was found.
+	 */
+	public <E extends FlexibleElement> E getFirstElementOfType(final Class<E> elementType) {
+		for (final Layout layout : getAllLayouts()) {
+			for (final LayoutGroup group : layout.getGroups()) {
+				for (final LayoutConstraint constraint : group.getConstraints()) {
+					final FlexibleElement flexibleElement = constraint.getElement();
+					if (flexibleElement != null && elementType.isAssignableFrom(flexibleElement.getClass())) {
+						return elementType.cast(flexibleElement);
+					}
+				}
+			}
+		}
+		return null;
+	}
+	
+	/**
+	 * Returns a new collection of every layout in this model.
+	 * 
+	 * @return A new collection of every layout in this model.
+	 */
+	public Collection<Layout> getAllLayouts() {
+		final ArrayList<Layout> layouts = new ArrayList<>();
+		
+		if (projectBanner != null && projectBanner.getLayout() != null) {
+			layouts.add(projectBanner.getLayout());
+		}
+		
+		if (projectDetails != null && projectDetails.getLayout() != null) {
+			layouts.add(projectDetails.getLayout());
+		}
+		
+		if (phaseModels != null) {
+			for (final PhaseModel phase : phaseModels) {
+				if (phase != null && phase.getLayout() != null) {
+					layouts.add(phase.getLayout());
+				}
+			}
+		}
+		
+		return layouts;
 	}
 
 	/**
@@ -357,14 +411,29 @@ public class ProjectModel extends AbstractEntityId<Integer> implements Deleteabl
     public Date getDateMaintenance() {
 		return dateMaintenance;
 	}
-    
+
 	@Override
     public void setDateMaintenance(Date dateMaintenance) {
 		this.dateMaintenance = dateMaintenance;
 	}
-	
+
 	public boolean isUnderMaintenance() {
 		return dateMaintenance != null && dateMaintenance.before(new Date());
 	}
-	
+
+	public List<Profile> getDefaultTeamMemberProfiles() {
+		return defaultTeamMemberProfiles;
+	}
+
+	public void setDefaultTeamMemberProfiles(List<Profile> defaultTeamMemberProfiles) {
+		this.defaultTeamMemberProfiles = defaultTeamMemberProfiles;
+	}
+
+	public List<FrameworkFulfillment> getFrameworkFulfillments() {
+		return frameworkFulfillments;
+	}
+
+	public void setFrameworkFulfillments(List<FrameworkFulfillment> frameworkFulfillments) {
+		this.frameworkFulfillments = frameworkFulfillments;
+	}
 }

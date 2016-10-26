@@ -42,6 +42,7 @@ import org.sigmah.client.ui.widget.panel.Panels;
 import org.sigmah.client.ui.widget.toolbar.ActionToolBar;
 import org.sigmah.client.util.ClientUtils;
 import org.sigmah.client.util.DateUtils;
+import org.sigmah.shared.dto.ContactDTO;
 import org.sigmah.shared.dto.UserDTO;
 import org.sigmah.shared.dto.orgunit.OrgUnitDTO;
 import org.sigmah.shared.dto.profile.PrivacyGroupDTO;
@@ -62,7 +63,10 @@ import com.extjs.gxt.ui.client.store.StoreFilter;
 import com.extjs.gxt.ui.client.widget.ContentPanel;
 import com.extjs.gxt.ui.client.widget.LayoutContainer;
 import com.extjs.gxt.ui.client.widget.Text;
+import com.extjs.gxt.ui.client.widget.Window;
+import com.extjs.gxt.ui.client.widget.form.ComboBox;
 import com.extjs.gxt.ui.client.widget.form.Field;
+import com.extjs.gxt.ui.client.widget.form.FormPanel;
 import com.extjs.gxt.ui.client.widget.form.TextField;
 import com.extjs.gxt.ui.client.widget.grid.ColumnConfig;
 import com.extjs.gxt.ui.client.widget.grid.ColumnData;
@@ -70,13 +74,15 @@ import com.extjs.gxt.ui.client.widget.grid.ColumnModel;
 import com.extjs.gxt.ui.client.widget.grid.Grid;
 import com.extjs.gxt.ui.client.widget.grid.GridCellRenderer;
 import com.extjs.gxt.ui.client.widget.grid.GridSelectionModel;
+import com.extjs.gxt.ui.client.widget.layout.FitLayout;
 import com.extjs.gxt.ui.client.widget.toolbar.LabelToolItem;
 import com.google.gwt.i18n.client.DateTimeFormat;
+import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.inject.Singleton;
 
 /**
  * Admin users view implementation.
- * 
+ *
  * @author Maxime Lombard (mlombard@ideia.fr) v1.3
  * @author Mehdi Benabdeslam (mehdi.benabdeslam@netapsys.fr) v2.0
  * @author Denis Colliot (dcolliot@ideia.fr) (v2.0)
@@ -106,6 +112,7 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 	private Grid<UserDTO> usersGrid;
 	private ContentPanel usersListPanel;
 	private Button usersAddButton;
+	private Button usersAddByEmailButton;
 	private Button usersDesactiveActiveButton;
 	private Button usersRefreshButton;
 	private Field<String> usersFilterField;
@@ -222,6 +229,37 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 		};
 	}
 
+	@Override
+	public void buildAddUserByEmailWindow(List<ContactDTO> availableContacts, final UsersAdminPresenter.AddUserByEmailHandler handler) {
+		final Window window = new Window();
+		window.setHeadingText(I18N.CONSTANTS.adminContactAddUserByEmail());
+		window.setPlain(true);
+		window.setModal(true);
+		window.setBlinkModal(true);
+		window.setLayout(new FitLayout());
+		window.setSize(650, 150);
+
+		final ComboBox<ContactDTO> combobox = Forms.combobox(I18N.CONSTANTS.email(), true, ContactDTO.ID, ContactDTO.EMAIL_WITH_FULLNAME);
+		combobox.getStore().add(availableContacts);
+		combobox.setEditable(true);
+		Button button = Forms.button(I18N.CONSTANTS.addUser());
+		button.addSelectionListener(new SelectionListener<ButtonEvent>() {
+			@Override
+			public void componentSelected(ButtonEvent ce) {
+				handler.handleSubmit(combobox.getValue());
+				window.hide();
+			}
+		});
+
+		FormPanel formPanel = new FormPanel();
+		formPanel.setHeaderVisible(false);
+		formPanel.setLayout(Forms.layout(100, 500));
+		formPanel.add(combobox);
+		formPanel.getButtonBar().add(button);
+		window.add(formPanel);
+		window.show();
+	}
+
 	/**
 	 * {@inheritDoc}
 	 */
@@ -313,6 +351,11 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 		return usersAddButton;
 	}
 
+	@Override
+	public Button getUsersAddByEmailButton() {
+		return usersAddByEmailButton;
+	}
+
 	/**
 	 * {@inheritDoc}
 	 */
@@ -345,7 +388,7 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 
 	/**
 	 * Create the {@link PrivacyGroupDTO} grid.
-	 * 
+	 *
 	 * @return The grid component.
 	 */
 	private Grid<PrivacyGroupDTO> buildPrivacyGroupsGrid() {
@@ -393,7 +436,7 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 
 	/**
 	 * Create the {@link ProfileDTO} grid.
-	 * 
+	 *
 	 * @return The grid component.
 	 */
 	private Grid<ProfileDTO> buildProfilesGrid() {
@@ -490,7 +533,7 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 
 	/**
 	 * Create the {@link UserDTO} grid.
-	 * 
+	 *
 	 * @return The grid component.
 	 */
 	private Grid<UserDTO> buildUsersGrid() {
@@ -541,14 +584,14 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 		// OrgUnit column.
 		// --
 
-		column = new ColumnConfig(UserDTO.ORG_UNIT, I18N.CONSTANTS.adminUsersOrgUnit(), 110);
+		column = new ColumnConfig(UserDTO.MAIN_ORG_UNIT, I18N.CONSTANTS.adminUsersOrgUnit(), 110);
 		column.setRenderer(new GridCellRenderer<UserDTO>() {
 
 			@Override
 			public Object render(final UserDTO model, final String property, final ColumnData config, final int rowIndex, final int colIndex,
 					final ListStore<UserDTO> store, final Grid<UserDTO> grid) {
 
-				final OrgUnitDTO orgUnit = model.getOrgUnit();
+				final OrgUnitDTO orgUnit = model.getMainOrgUnit();
 				return createTextWidget(orgUnit != null ? (ClientUtils.isNotBlank(orgUnit.getFullName()) ? orgUnit.getFullName() : "") : "");
 			}
 		});
@@ -636,7 +679,7 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 
 	/**
 	 * Initializes the grids toolbars.
-	 * 
+	 *
 	 * @param panel
 	 *          The grid type.
 	 * @return The toolbar component.
@@ -649,6 +692,7 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 
 			case USERS:
 				usersAddButton = toolBar.addButton(I18N.CONSTANTS.addUser(), IconImageBundle.ICONS.addUser());
+				usersAddByEmailButton = toolBar.addButton(I18N.CONSTANTS.adminContactAddUserByEmail(), IconImageBundle.ICONS.addUser());
 				usersDesactiveActiveButton = toolBar.addButton(I18N.CONSTANTS.adminUserDisable(), IconImageBundle.ICONS.deleteUser());
 
 				toolBar.add(new LabelToolItem(I18N.CONSTANTS.adminUsersSearchByName()));
@@ -721,7 +765,7 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 
 	/**
 	 * Creates a new {@link Grid} instance for the given {@code columnConfigs}.
-	 * 
+	 *
 	 * @param columnConfigs
 	 *          The columns configurations list.
 	 * @param autoExpandColumn
@@ -744,7 +788,7 @@ public class UsersAdminView extends AbstractView implements UsersAdminPresenter.
 
 	/**
 	 * Builds a new {@link Text} widget instance with the given {@code content}.
-	 * 
+	 *
 	 * @param content
 	 *          The text content.
 	 * @return The widget instance.

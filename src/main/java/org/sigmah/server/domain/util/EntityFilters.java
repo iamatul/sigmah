@@ -40,7 +40,7 @@ public final class EntityFilters {
 
 	/**
 	 * <p>
-	 * <em>User filter</em> key.<br/>
+	 * <em>User filter</em> key.
 	 * Filters data that user is not authorized to see.
 	 * </p>
 	 * <p>
@@ -53,7 +53,7 @@ public final class EntityFilters {
 
 	/**
 	 * <p>
-	 * <em>Deleted filter</em> key.<br/>
+	 * <em>Deleted filter</em> key.
 	 * Hides deleted data.
 	 * </p>
 	 * <p>
@@ -371,6 +371,16 @@ public final class EntityFilters {
 	// HIDE DELETED FILTER.
 
 	public static final String TRIPLET_VALUE_HIDE_DELETED_CONDITION = EntityConstants.TRIPLETS_VALUE_COLUMN_DATE_DELETED + " IS NULL";
+
+	// --------------------------------------------------------------------------------
+	//
+	// CONTACT MODEL ENTITY.
+	//
+	// --------------------------------------------------------------------------------
+
+	// HIDE DELETED FILTER.
+
+	public static final String CONTACT_MODEL_HIDE_DELETED_CONDITION = EntityConstants.CONTACT_MODEL_COLUMN_DATE_DELETED + " IS NULL";
 
 	// --------------------------------------------------------------------------------
 	//

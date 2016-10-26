@@ -45,6 +45,8 @@ import org.sigmah.client.ui.presenter.admin.importation.ImportationSchemeAdminPr
 import org.sigmah.client.ui.presenter.admin.models.AddBudgetSubFieldPresenter;
 import org.sigmah.client.ui.presenter.admin.models.EditFlexibleElementAdminPresenter;
 import org.sigmah.client.ui.presenter.admin.models.EditLayoutGroupAdminPresenter;
+import org.sigmah.client.ui.presenter.admin.models.contact.AddContactModelAdminPresenter;
+import org.sigmah.client.ui.presenter.admin.models.contact.ContactModelsAdminPresenter;
 import org.sigmah.client.ui.presenter.admin.models.importer.AddImportationSchemeModelsAdminPresenter;
 import org.sigmah.client.ui.presenter.admin.models.importer.AddMatchingRuleImportationShemeModelsAdminPresenter;
 import org.sigmah.client.ui.presenter.admin.models.importer.ImportModelPresenter;
@@ -61,6 +63,12 @@ import org.sigmah.client.ui.presenter.admin.users.ProfileEditPresenter;
 import org.sigmah.client.ui.presenter.admin.users.UserEditPresenter;
 import org.sigmah.client.ui.presenter.admin.users.UsersAdminPresenter;
 import org.sigmah.client.ui.presenter.calendar.CalendarEventPresenter;
+import org.sigmah.client.ui.presenter.contact.ContactDetailsPresenter;
+import org.sigmah.client.ui.presenter.contact.ContactHistoryPresenter;
+import org.sigmah.client.ui.presenter.contact.ContactPresenter;
+import org.sigmah.client.ui.presenter.contact.ContactRelationshipsPresenter;
+import org.sigmah.client.ui.presenter.contact.export.ExportContactsPresenter;
+import org.sigmah.client.ui.presenter.contact.export.ExportContactsSettingPresenter;
 import org.sigmah.client.ui.presenter.importation.ImportationPresenter;
 import org.sigmah.client.ui.presenter.orgunit.OrgUnitCalendarPresenter;
 import org.sigmah.client.ui.presenter.orgunit.OrgUnitDashboardPresenter;
@@ -69,11 +77,7 @@ import org.sigmah.client.ui.presenter.orgunit.OrgUnitPresenter;
 import org.sigmah.client.ui.presenter.orgunit.OrgUnitReportsPresenter;
 import org.sigmah.client.ui.presenter.password.LostPasswordPresenter;
 import org.sigmah.client.ui.presenter.password.ResetPasswordPresenter;
-import org.sigmah.client.ui.presenter.project.LinkedProjectPresenter;
-import org.sigmah.client.ui.presenter.project.ProjectCalendarPresenter;
-import org.sigmah.client.ui.presenter.project.ProjectDetailsPresenter;
-import org.sigmah.client.ui.presenter.project.ProjectPresenter;
-import org.sigmah.client.ui.presenter.project.ProjectReportsPresenter;
+import org.sigmah.client.ui.presenter.project.*;
 import org.sigmah.client.ui.presenter.project.dashboard.ProjectDashboardPresenter;
 import org.sigmah.client.ui.presenter.project.export.ExportProjectsPresenter;
 import org.sigmah.client.ui.presenter.project.export.ExportProjectsSettingPresenter;
@@ -111,7 +115,7 @@ import org.sigmah.offline.status.ApplicationStateManager;
 
 /**
  * GIN injector.
- * 
+ *
  * @author Tom Miette (tmiette@ideia.fr)
  * @author Denis Colliot (dcolliot@ideia.fr)
  */
@@ -188,7 +192,7 @@ public interface Injector extends Ginjector {
 	LostPasswordPresenter getLostPasswordPresenter();
 
 	ResetPasswordPresenter getResetPasswordPresenter();
-	
+
 	ChangeOwnPasswordPresenter getChangeOwnPasswordPresenter();
 
 	CreateProjectPresenter getCreateProjectPresenter();
@@ -211,6 +215,8 @@ public interface Injector extends Ginjector {
 
 	ProjectDetailsPresenter getProjectDetailsPresenter();
 
+	ProjectTeamMembersPresenter getProjectTeamMembersPresenter();
+
 	ProjectCalendarPresenter getProjectCalendarPresenter();
 
 	ProjectReportsPresenter getProjectReportsPresenter();
@@ -231,6 +237,10 @@ public interface Injector extends Ginjector {
 
 	EditSitePresenter getEditSitePresenter();
 
+	ExportContactsPresenter getExportContactsPresenter();
+
+	ExportContactsSettingPresenter getExportContactsSettingPresenter();
+
 	ExportProjectsPresenter getExportProjectsPresenter();
 
 	ExportProjectsSettingPresenter getExportProjectsSettingPresenter();
@@ -250,6 +260,16 @@ public interface Injector extends Ginjector {
 	OrgUnitCalendarPresenter getOrgUnitCalendarPresenter();
 
 	OrgUnitReportsPresenter getOrgUnitReportsPresenter();
+
+	// ---- Contact presenters
+
+	ContactPresenter getContactPresenter();
+
+	ContactDetailsPresenter getContactDetailsPresenter();
+
+	ContactRelationshipsPresenter getContactRelationshipsPresenter();
+
+	ContactHistoryPresenter getContactHistoryPresenter();
 
 	// ---- Admin presenters
 
@@ -281,6 +301,10 @@ public interface Injector extends Ginjector {
 
 	AddProjectModelAdminPresenter getAddProjectModelAdminPresenter();
 
+	ContactModelsAdminPresenter getContactModelsAdminPresenter();
+
+	AddContactModelAdminPresenter getAddContactModelAdminPresenter();
+
 	AddImportationSchemePresenter getAddImportationSchemePresenter();
 
 	ReportModelsAdminPresenter getReportModelsAdminPresenter();
@@ -302,9 +326,9 @@ public interface Injector extends Ginjector {
 	AddImportationSchemeModelsAdminPresenter getAddImportationSchemeModelsAdminPresenter();
 
 	AddMatchingRuleImportationShemeModelsAdminPresenter getAddMatchingRuleImportationShemeModelsAdminPresenter();
-	
+
 	// ---- Offline presenters
-	
+
 	FileSelectionPresenter getFileSelectionPresenter();
-	
+
 }

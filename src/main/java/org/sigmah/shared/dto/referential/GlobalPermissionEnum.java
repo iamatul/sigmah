@@ -45,14 +45,25 @@ public enum GlobalPermissionEnum implements Result {
 	 */
 
 	/**
-	 * View the projects list and the project page.
+	 * View all projects for which the user is a member of the project team.
 	 */
-	VIEW_PROJECT(GlobalPermissionCategory.PROJECT),
+	VIEW_MY_PROJECTS(GlobalPermissionCategory.PROJECT),
+
+	/**
+	 * Edit and save the project details, the project phases, the project funding, the log frame and the calendar of
+	 * projects for which the user is a member of the project team.
+	 */
+	EDIT_PROJECT(VIEW_MY_PROJECTS),
+
+	/**
+	 * View all the projects list and the project page.
+	 */
+	VIEW_ALL_PROJECTS(VIEW_MY_PROJECTS),
 
 	/**
 	 * Edit and save the project details, the project phases, the project funding, the log frame and the calendar.
 	 */
-	EDIT_PROJECT(VIEW_PROJECT),
+	EDIT_ALL_PROJECTS(VIEW_ALL_PROJECTS),
 
 	/**
 	 * Create a new project or a new funding.
@@ -67,12 +78,12 @@ public enum GlobalPermissionEnum implements Result {
 	/**
 	 * Delete a project.
 	 */
-	DELETE_PROJECT(GlobalPermissionCategory.PROJECT),
+	DELETE_PROJECT(VIEW_MY_PROJECTS),
 	
 	/**
 	 * Lock or unlock a project.
 	 */
-	LOCK_PROJECT(GlobalPermissionCategory.PROJECT),
+	LOCK_PROJECT(VIEW_MY_PROJECTS),
 	
 	/**
 	 * Modify locked content. (i. e. content of closed phases and content of closed projects).
@@ -102,7 +113,7 @@ public enum GlobalPermissionEnum implements Result {
 	/**
 	 * for viewing the logframe sub-tab.
 	 */
-	VIEW_LOGFRAME(VIEW_PROJECT),
+	VIEW_LOGFRAME(VIEW_MY_PROJECTS),
 
 	/**
 	 * for creating/modifying/deleting objectives, expected results, activities,
@@ -113,7 +124,7 @@ public enum GlobalPermissionEnum implements Result {
 	/**
 	 * for viewing the agenda sub-tab.
 	 */
-	VIEW_PROJECT_AGENDA(VIEW_PROJECT),
+	VIEW_PROJECT_AGENDA(VIEW_MY_PROJECTS),
 
 	/**
 	 * for creating/deleting/modifying events in the agenda.
@@ -124,7 +135,7 @@ public enum GlobalPermissionEnum implements Result {
 	 * for creating/deleting/modifying/closing reminders created by the user.
 	 */
 
-	EDIT_OWN_REMINDERS(VIEW_PROJECT),
+	EDIT_OWN_REMINDERS(VIEW_MY_PROJECTS),
 	
 	/**
 	 * for displaying the import button.
@@ -141,7 +152,7 @@ public enum GlobalPermissionEnum implements Result {
 	/**
 	 * for viewing the two indicator sub-tabs.
 	 */
-	VIEW_INDICATOR(VIEW_PROJECT),
+	VIEW_INDICATOR(VIEW_MY_PROJECTS),
 
 	/**
 	 * for creating/deleting/modifying indicator definitions.
@@ -168,6 +179,12 @@ public enum GlobalPermissionEnum implements Result {
 	 */
 	MANAGE_SITES(VIEW_MAPTAB),
 	
+	/**
+	 *
+	 */
+	VIEW_PROJECT_TEAM_MEMBERS(VIEW_MY_PROJECTS),
+
+	EDIT_PROJECT_TEAM_MEMBERS(VIEW_PROJECT_TEAM_MEMBERS),
 	
 	/*
 	 * Org unit-related permissions. 
@@ -193,6 +210,34 @@ public enum GlobalPermissionEnum implements Result {
 	 */
 	EDIT_ORG_UNIT_AGENDA(VIEW_ORG_UNIT_AGENDA),
 	
+	/*
+	 * Contact related permissions.
+	 */
+
+	/**
+	 * For viewing contacts related to available org units.
+	 */
+	VIEW_VISIBLE_CONTACTS(GlobalPermissionCategory.CONTACT),
+
+	/**
+	 * For exporting all contacts
+	 */
+	EXPORT_ALL_CONTACTS(VIEW_VISIBLE_CONTACTS),
+
+	/**
+	 * For creating/deleting/modifying visible contacts
+	 */
+	EDIT_VISIBLE_CONTACTS(VIEW_VISIBLE_CONTACTS),
+
+	/**
+	 * For importing or creating contacts
+	 */
+	IMPORT_CONTACTS(VIEW_VISIBLE_CONTACTS),
+
+	/**
+	 * For deleting contacts
+	 */
+	DELETE_VISIBLE_CONTACTS(VIEW_VISIBLE_CONTACTS),
 	
 	/*
 	 * Administration-related permissions. 
@@ -222,6 +267,11 @@ public enum GlobalPermissionEnum implements Result {
 	 * View the admin page to manage org unit models.
 	 */
 	MANAGE_ORG_UNIT_MODELS(VIEW_ADMIN),
+
+	/**
+	 * View the admin page to manage contact models.
+	 */
+	MANAGE_CONTACT_MODELS(VIEW_ADMIN),
 
 	/**
 	 * View the admin page to manage report models.
@@ -254,10 +304,19 @@ public enum GlobalPermissionEnum implements Result {
 	EXPORT_HXL(GlobalPermissionCategory.OTHER),
 	
 	/**
+	 * Create a new layout group iteration
+	 */
+	CREATE_ITERATIONS(GlobalPermissionCategory.OTHER),
+
+	/**
      * For changing own password.
      */
-	CHANGE_PASSWORD(GlobalPermissionCategory.OTHER);
-
+	CHANGE_PASSWORD(GlobalPermissionCategory.OTHER),
+	/**
+	 * For management measure performances.
+	 */
+	PROBES_MANAGEMENT(GlobalPermissionCategory.OTHER);
+	
 	/**
 	 * The global permission category (never {@code null}).
 	 */
@@ -346,6 +405,8 @@ public enum GlobalPermissionEnum implements Result {
 		
 		ORG_UNIT,
 
+		CONTACT,
+
 		ADMINISTRATION,
 
 		OTHER,
@@ -389,6 +450,9 @@ public enum GlobalPermissionEnum implements Result {
 					
 				case ORG_UNIT:
 					return I18N.CONSTANTS.categoryOrgUnit();
+
+				case CONTACT:
+					return I18N.CONSTANTS.categoryContact();
 
 				case ADMINISTRATION:
 					return I18N.CONSTANTS.categoryAdministration();
@@ -441,12 +505,17 @@ public enum GlobalPermissionEnum implements Result {
 		}
 
 		switch (globalPermission) {
-
-			case VIEW_PROJECT:
-				return I18N.CONSTANTS.VIEW_PROJECT();
+			case VIEW_MY_PROJECTS:
+				return I18N.CONSTANTS.VIEW_MY_PROJECTS();
 
 			case EDIT_PROJECT:
 				return I18N.CONSTANTS.EDIT_PROJECT();
+
+			case VIEW_ALL_PROJECTS:
+				return I18N.CONSTANTS.VIEW_ALL_PROJECTS();
+
+			case EDIT_ALL_PROJECTS:
+				return I18N.CONSTANTS.EDIT_ALL_PROJECTS();
 
 			case CREATE_PROJECT:
 				return I18N.CONSTANTS.CREATE_PROJECT();
@@ -511,9 +580,18 @@ public enum GlobalPermissionEnum implements Result {
 			case MANAGE_SITES:
 				return I18N.CONSTANTS.MANAGE_SITES();
 
+			case VIEW_PROJECT_TEAM_MEMBERS:
+				return I18N.CONSTANTS.VIEW_PROJECT_TEAM_MEMBERS();
+
+			case EDIT_PROJECT_TEAM_MEMBERS:
+				return I18N.CONSTANTS.EDIT_PROJECT_TEAM_MEMBERS();
+
 			case GLOBAL_EXPORT:
 				return I18N.CONSTANTS.GLOBAL_EXPORT();
 				
+			case CREATE_ITERATIONS:
+				return I18N.CONSTANTS.CREATE_ITERATIONS();
+
 			case EDIT_ORG_UNIT:
 				return I18N.CONSTANTS.EDIT_ORG_UNIT();
 				
@@ -526,6 +604,21 @@ public enum GlobalPermissionEnum implements Result {
 			case EDIT_ORG_UNIT_AGENDA:
 				return I18N.CONSTANTS.EDIT_ORG_UNIT_AGENDA();
 			
+			case VIEW_VISIBLE_CONTACTS:
+				return I18N.CONSTANTS.contactPermissionViewVisibleContacts();
+
+			case EXPORT_ALL_CONTACTS:
+				return I18N.CONSTANTS.contactPermissionExportAllContacts();
+
+			case EDIT_VISIBLE_CONTACTS:
+				return I18N.CONSTANTS.contactPermissionEditVisibleContacts();
+
+			case IMPORT_CONTACTS:
+				return I18N.CONSTANTS.contactPermissionImportContacts();
+
+			case DELETE_VISIBLE_CONTACTS:
+				return I18N.CONSTANTS.contactPermissionDeleteVisibleContacts();
+
 			case VIEW_ADMIN:
 				return I18N.CONSTANTS.VIEW_ADMIN();
 
@@ -541,6 +634,9 @@ public enum GlobalPermissionEnum implements Result {
 			case MANAGE_ORG_UNIT_MODELS:
 				return I18N.CONSTANTS.MANAGE_ORG_UNIT_MODELS();
 				
+			case MANAGE_CONTACT_MODELS:
+				return I18N.CONSTANTS.MANAGE_CONTACT_MODELS();
+
 			case MANAGE_REPORT_MODELS:
 				return I18N.CONSTANTS.MANAGE_REPORT_MODELS();
 				
@@ -555,7 +651,9 @@ public enum GlobalPermissionEnum implements Result {
 				
 			case EXPORT_HXL:
 				return I18N.CONSTANTS.EXPORT_HXL();
-
+				
+			case PROBES_MANAGEMENT:
+				return I18N.CONSTANTS.PROBES_MANAGEMENT();
 			default:
 				return globalPermission.name();
 		}
